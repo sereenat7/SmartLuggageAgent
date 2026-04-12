@@ -1,21 +1,26 @@
 import React from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  SafeAreaView, Platform, StatusBar, ActivityIndicator, Alert 
+  SafeAreaView, Platform, StatusBar, ActivityIndicator, Alert, Modal 
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { WebView } from 'react-native-webview';
 import { createBooking } from '../utils/bookingService';
 import { calculatePrice, calculateDistance } from '../utils/pricingCalculator';
-import { useState, useMemo, useEffect } from 'react';
+import { createRazorpayOrder, verifyRazorpayPayment } from '../utils/paymentService';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 
 export default function BookingSummary() {
   const router = useRouter();
   const params = useLocalSearchParams(); 
   const [isLoading, setIsLoading] = useState(false);
+  const [showRazorpayModal, setShowRazorpayModal] = useState(false);
+  const [paymentData, setPaymentData] = useState(null);
+  const webViewRef = useRef(null);
   
   // State for pickup coordinates (freshly loaded from AsyncStorage)
   const [pickupCoords, setPickupCoords] = useState({
@@ -150,8 +155,17 @@ export default function BookingSummary() {
   const handleConfirmBooking = async () => {
     setIsLoading(true);
     try {
-      // Get user details from AsyncStorage
+      // Get user details and token from AsyncStorage
       const userName = await AsyncStorage.getItem('userName');
+      const userToken = await AsyncStorage.getItem('authToken');
+
+      console.log('DEBUG: Retrieved token from AsyncStorage:', userToken);
+      
+      if (!userToken) {
+        Alert.alert('Error', 'Please login to continue');
+        setIsLoading(false);
+        return;
+      }
 
       // Use the drop location coordinates passed through the flow
       const dropCoords = {
@@ -169,7 +183,7 @@ export default function BookingSummary() {
         console.log("Could not parse photos:", e);
       }
 
-      // Prepare booking data with proper coordinates
+      // Prepare booking data
       const bookingData = {
         // User details
         username: userName || 'User',
@@ -184,6 +198,10 @@ export default function BookingSummary() {
         departureAirport: depAirport,
         departureDate: depDate,
         departureTime: depTime,
+        arrivalCity: depCity, // You may want to add this to params
+        arrivalAirport: depAirport, // You may want to add this to params
+        arrivalDate: depDate, // You may want to add this to params
+        arrivalTime: depTime, // You may want to add this to params
 
         // Luggage Details
         bagCount: parseInt(bags) || 1,
@@ -210,37 +228,249 @@ export default function BookingSummary() {
 
         // Additional Info
         additionalInfo: additionalInfo,
+
+        // Payment Info
+        amount: calculatedPrice,
+        paymentMethod: 'card',
       };
 
-      // Save booking to database
-      const response = await createBooking(bookingData);
-      
-      if (response.success) {
-        Alert.alert(
-          'Success',
-          'Booking confirmed successfully!',
-          [
-            {
-              text: 'Continue',
-              onPress: () => {
-                // Clear temporary booking details from storage
-                AsyncStorage.removeItem('pickupDetails');
-                
-                // Navigate to home or bookings screen
-                router.replace('/(tabs)');
-              },
-            },
-          ]
-        );
-      } else {
-        Alert.alert('Error', response.message || 'Failed to confirm booking');
+      // Step 1: Create Razorpay Order
+      console.log('Creating Razorpay order for amount:', calculatedPrice);
+      const orderResponse = await createRazorpayOrder(
+        calculatedPrice,
+        bookingData,
+        userToken
+      );
+
+      if (!orderResponse.success) {
+        Alert.alert('Error', orderResponse.message || 'Failed to create payment order');
+        setIsLoading(false);
+        return;
       }
+
+      console.log('Order created successfully:', orderResponse);
+      setIsLoading(false);
+
+      // Step 2: Show Razorpay Payment Modal
+      setPaymentData({
+        orderId: orderResponse.orderId,
+        amount: orderResponse.amount,
+        apiKey: orderResponse.key,
+        userName: bookingData.username,
+        userEmail: '',
+        userPhone: '+919004223553',
+        bookingData: bookingData,
+        userToken: userToken,
+      });
+      setShowRazorpayModal(true);
     } catch (error) {
       console.error('Error confirming booking:', error);
       Alert.alert('Error', error.message || 'Failed to confirm booking');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handlePaymentSuccess = async (paymentResponse) => {
+    try {
+      setIsLoading(true);
+      setShowRazorpayModal(false);
+      console.log('Payment Success Response:', paymentResponse);
+
+      // Verify payment with backend
+      const response = await fetch(
+        'http://10.166.255.52:5000/api/payment/verify-payment',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${paymentData.userToken}`,
+          },
+          body: JSON.stringify({
+            razorpayOrderId: paymentResponse.razorpay_order_id,
+            razorpayPaymentId: paymentResponse.razorpay_payment_id,
+            razorpaySignature: paymentResponse.razorpay_signature,
+            bookingData: paymentData.bookingData,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      setIsLoading(false);
+
+      if (data.success) {
+        // Navigate to success page
+        router.push({
+          pathname: '/(booking)/payment-success',
+          params: {
+            bookingId: data.bookingId,
+          },
+        });
+      } else {
+        Alert.alert('Verification Failed', data.message || 'Could not verify payment');
+      }
+    } catch (error) {
+      setIsLoading(false);
+      console.error('Error verifying payment:', error);
+      Alert.alert('Error', 'Failed to verify payment');
+    }
+  };
+
+  const handlePaymentError = (error) => {
+    console.error('Payment Error:', error);
+    Alert.alert(
+      'Payment Failed',
+      error.description || error.message || 'Payment failed. Please try again.'
+    );
+  };
+
+  const generatePaymentHTML = () => {
+    if (!paymentData) return '';
+
+    const injectedJavaScript = `
+      (function() {
+        console.log('Razorpay payment script initializing...');
+        
+        const options = {
+          key: '${paymentData.apiKey}',
+          amount: ${paymentData.amount},
+          currency: 'INR',
+          name: 'Smart Luggage Agent',
+          description: '${paymentData.bookingData.flightNumber}',
+          image: 'https://rzp.io/l/eMB5hml',
+          order_id: '${paymentData.orderId}',
+          prefill: {
+            name: '${paymentData.userName || 'User'}',
+            email: '${paymentData.userEmail || 'user@example.com'}',
+            contact: '${paymentData.userPhone || '9004223553'}'
+          },
+          theme: {
+            color: '#FF9500'
+          },
+          notes: {
+            booking_type: 'luggage_booking',
+            app: 'smart_luggage_agent'
+          },
+          method: {
+            upi: true,
+            netbanking: true,
+            card: true,
+            wallet: true,
+            emandate: 'netbanking'
+          },
+          display: 'page',
+          handler: function(response) {
+            console.log('Payment Success:', response);
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+              type: 'PAYMENT_SUCCESS',
+              data: response
+            }));
+          },
+          modal: {
+            ondismiss: function() {
+              console.log('Payment modal dismissed');
+              window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'PAYMENT_CANCEL'
+              }));
+            },
+            confirm_close: true,
+            escape: true
+          }
+        };
+
+        const rzp1 = new Razorpay(options);
+        
+        rzp1.on('payment.failed', function (response) {
+          console.log('Payment Failed:', response);
+          window.ReactNativeWebView.postMessage(JSON.stringify({
+            type: 'PAYMENT_ERROR',
+            data: response
+          }));
+        });
+
+        // Show loading screen, then open with full payment options
+        setTimeout(() => {
+          document.getElementById('loadingScreen').style.display = 'none';
+          rzp1.open();
+        }, 800);
+      })();
+    `;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Smart Luggage Agent - Payment</title>
+        <script src="https://checkout.razorpay.com/v1/checkout.js"><\/script>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            background: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          }
+          #loadingScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: #f5f5f5;
+            z-index: 9999;
+          }
+          .spinner {
+            border: 4px solid #f0f0f0;
+            border-top: 4px solid #ff9500;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          .loading-text {
+            color: #333;
+            font-size: 16px;
+            font-weight: 500;
+            text-align: center;
+          }
+        </style>
+      </head>
+      <body>
+        <div id="loadingScreen">
+          <div class="spinner"></div>
+          <p class="loading-text">Opening payment gateway...</p>
+        </div>
+        <script>
+          ${injectedJavaScript}
+        <\/script>
+      </body>
+      </html>
+    `;
+
+    return htmlContent;
+  };
+
+  const handlePaymentCancel = () => {
+    setShowRazorpayModal(false);
+    Alert.alert(
+      'Payment Cancelled',
+      'You have cancelled the payment. Please try again.'
+    );
   };
 
   return (
@@ -353,6 +583,61 @@ export default function BookingSummary() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Razorpay Payment Modal */}
+      <Modal
+        visible={showRazorpayModal}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => {
+          setShowRazorpayModal(false);
+        }}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 }}>
+            <TouchableOpacity onPress={() => {
+              setShowRazorpayModal(false);
+            }}>
+              <Feather name="arrow-left" size={28} color="#1A1C1E" />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#1A1C1E' }}>Payment</Text>
+            <View style={{ width: 28 }} />
+          </View>
+
+          <WebView
+            ref={webViewRef}
+            source={{ html: generatePaymentHTML() }}
+            onMessage={(event) => {
+              try {
+                const message = JSON.parse(event.nativeEvent.data);
+                console.log('Message from WebView:', message);
+
+                switch (message.type) {
+                  case 'PAYMENT_SUCCESS':
+                    handlePaymentSuccess(message.data);
+                    break;
+                  case 'PAYMENT_ERROR':
+                    handlePaymentError(message.data);
+                    break;
+                  case 'PAYMENT_CANCEL':
+                    handlePaymentCancel();
+                    break;
+                  default:
+                    console.log('Unknown message type:', message.type);
+                }
+              } catch (error) {
+                console.error('Error parsing message:', error);
+              }
+            }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            scalesPageToFit={true}
+            scrollEnabled={true}
+            style={{ flex: 1 }}
+          />
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -395,5 +680,5 @@ const styles = StyleSheet.create({
   gradientBtn: { height: 64, borderRadius: 22, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   payButtonText: { color: '#FFF', fontSize: 18, fontWeight: '800', marginRight: 8 },
   modifyBtn: { alignSelf: 'center', marginTop: 15 },
-  modifyText: { color: '#C7C7CC', fontWeight: '700', fontSize: 14 }
+  modifyText: { color: '#C7C7CC', fontWeight: '700', fontSize: 14 },
 });

@@ -32,6 +32,11 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
  * @returns {number} Total price in rupees
  */
 export function calculatePrice(bagCount, weight, distance) {
+  // FOR TESTING: Return ₹1
+  return 1;
+
+  // Uncomment below for production pricing
+  /*
   // Base price
   const basePrice = 100;
 
@@ -59,6 +64,7 @@ export function calculatePrice(bagCount, weight, distance) {
 
   // Round to nearest rupee
   return Math.round(totalPrice);
+  */
 }
 
 export { calculateDistance };

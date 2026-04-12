@@ -74,7 +74,12 @@ const initializeDatabase = (callback) => {
     `ALTER TABLE bookings ADD arrival_time VARCHAR(20)`,
     `ALTER TABLE bookings ADD drop_address TEXT`,
     `ALTER TABLE bookings ADD drop_latitude FLOAT`,
-    `ALTER TABLE bookings ADD drop_longitude FLOAT`
+    `ALTER TABLE bookings ADD drop_longitude FLOAT`,
+    `ALTER TABLE bookings ADD payment_status VARCHAR(50) DEFAULT 'pending'`,
+    `ALTER TABLE bookings ADD razorpay_order_id VARCHAR(100)`,
+    `ALTER TABLE bookings ADD razorpay_payment_id VARCHAR(100)`,
+    `ALTER TABLE bookings ADD amount DECIMAL(10, 2)`,
+    `ALTER TABLE bookings ADD payment_method VARCHAR(50)`
   ];
 
   let queryIndex = 0;
