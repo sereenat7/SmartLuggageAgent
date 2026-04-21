@@ -11,8 +11,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 1. Double check your IPv4 address using 'ipconfig'
 // 2. Ensure port is 5000 (from your server.js)
-const IP_ADDRESS = "10.166.255.52"; 
-const API_URL = "http://10.166.255.52:5000/api/auth/user-profile";
+const IP_ADDRESS = "192.168.0.127"; 
+const API_URL = "http://192.168.0.127:5000/api/auth/user-profile";
 
 const ProfileOption = ({ icon, title, color, onPress }) => (
   <TouchableOpacity style={styles.optionRow} onPress={onPress}>

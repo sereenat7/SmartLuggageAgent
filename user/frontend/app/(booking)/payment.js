@@ -54,7 +54,7 @@ export default function RazorpayPaymentScreen() {
 
       // Verify payment with backend
       const response = await fetch(
-        'http://10.166.255.52:5000/api/payment/verify-payment',
+        'http://192.168.0.127:5000/api/payment/verify-payment',
         {
           method: 'POST',
           headers: {
@@ -83,6 +83,15 @@ export default function RazorpayPaymentScreen() {
                   params: {
                     bookingId: data.bookingId,
                   },
+                });
+              },
+            },
+            {
+              text: 'Go to Bookings',
+              onPress: () => {
+                // Navigate to bookings tab
+                router.push({
+                  pathname: '/(tabs)',
                 });
               },
             },

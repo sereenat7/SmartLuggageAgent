@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const IP_ADDRESS = "10.166.255.52"; 
+const IP_ADDRESS = "192.168.0.127"; 
 const API_URL = `http://${IP_ADDRESS}:5000/api/auth`;
 
 export default function EditProfile() {
@@ -40,9 +40,6 @@ export default function EditProfile() {
           setName(result.name);
           setPhone(result.phone);
           setEmail(result.email && result.email !== "Not provided" ? result.email : "");
-          
-          // TEMP VALUE (for visibility test)
-          setCurrentPassword("********");
         }
       } catch (error) {
         Alert.alert("Error", "Failed to load profile data");
@@ -143,16 +140,15 @@ export default function EditProfile() {
 
             {/* Current Password Field */}
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Current Password</Text>
+              <Text style={styles.label}>Password</Text>
               <View style={styles.inputWrapper}>
                 <MaterialCommunityIcons name="lock-outline" size={22} color="#64748B" />
                 
                 <TextInput 
                   style={styles.input} 
                   value={currentPassword} 
-                  editable={true}
-                  selectTextOnFocus={false}
-                  caretHidden={true}
+                  onChangeText={setCurrentPassword}
+                  placeholder="Enter your password"
                   secureTextEntry={!showCurrentPass}
                   underlineColorAndroid="transparent"
                 />
