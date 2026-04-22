@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { triggerLoginNotification } from "../utils/notificationService";
 
 export default function LoginScreen() {
   const params = useLocalSearchParams();
@@ -85,6 +86,10 @@ export default function LoginScreen() {
           
           global.userPhone = data.user.phone;
           console.log("LOGIN PHONE:", global.userPhone);
+          
+          // Trigger OS-level notification
+          await triggerLoginNotification(data.user?.name || "User");
+          
           router.replace({
             pathname: "/(tabs)",
             params: { userName: data.user?.name || "User" }
