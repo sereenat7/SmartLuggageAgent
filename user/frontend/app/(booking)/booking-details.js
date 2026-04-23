@@ -14,7 +14,7 @@ export default function BookingDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(null);
 
-  const API_URL = "http://192.168.0.127:5000/api/bookings";
+  const API_URL = "http://192.168.8.247:5000/api/bookings";
 
   useEffect(() => {
     fetchBookingDetails();

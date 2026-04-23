@@ -54,7 +54,7 @@ export default function RazorpayPaymentScreen() {
 
       // Verify payment with backend
       const response = await fetch(
-        'http://192.168.0.127:5000/api/payment/verify-payment',
+        'http://192.168.8.247:5000/api/payment/verify-payment',
         {
           method: 'POST',
           headers: {

@@ -17,9 +17,12 @@ import Colors from '../constants/colors';
 let MapView = null;
 let Marker = null;
 let Polyline = null;
-
-// Note: react-native-maps is not available in Expo Go.
-// MapView, Marker, and Polyline will remain null, triggering the fallback UI.
+if (Platform.OS !== 'web') {
+  const maps = require('react-native-maps');
+  MapView = maps.default;
+  Marker = maps.Marker;
+  Polyline = maps.Polyline;
+}
 
 const DEFAULT_CITY_SPEED_KMPH = 28;
 
@@ -76,6 +79,24 @@ const buildInitialRegion = (agentLocation, customerLocation) => {
     longitudeDelta: Math.max(0.01, (maxLng - minLng) * 1.8),
   };
 };
+
+const buildTaskFromRequest = (request) => ({
+  id: request?.sessionId ? `session-${request.sessionId}` : `request-${request?.queueId || Date.now()}`,
+  sessionId: request?.sessionId || null,
+  agentName: request?.agentName || 'Agent',
+  agentId: request?.agentId || null,
+  type: 'Pickup',
+  pickupLocation: request?.pickupAddress || 'Pickup location pending',
+  dropLocation: request?.dropAddress || 'Drop location pending',
+  timeSlot: request?.pickupTime || 'Time slot pending',
+  luggage: Number(request?.bagCount || 1),
+  status: 'in-progress',
+  phoneNumber: request?.phone || request?.userPhone || '',
+  customerName: request?.name || request?.userName || 'Customer',
+  customerPhone: request?.phone || request?.userPhone || '',
+  pickupLatitude: request?.pickupLatitude || null,
+  pickupLongitude: request?.pickupLongitude || null,
+});
 
 export default function AgentRouteMapScreen({ navigation, route }) {
   const request = route?.params?.request || {};
@@ -227,6 +248,12 @@ export default function AgentRouteMapScreen({ navigation, route }) {
 
   const hasValidDestination = Boolean(customerLocation);
 
+  const handleArrived = () => {
+    navigation.navigate('TaskDetails', {
+      task: buildTaskFromRequest(request),
+    });
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container}>
@@ -249,16 +276,6 @@ export default function AgentRouteMapScreen({ navigation, route }) {
           <View style={styles.centerState}>
             <Text style={styles.centerStateTitle}>Pickup location missing</Text>
             <Text style={styles.centerStateText}>This request has no user coordinates yet.</Text>
-          </View>
-        ) : !MapView ? (
-          <View style={styles.centerState}>
-            <Text style={styles.centerStateTitle}>Map unavailable in Expo Go</Text>
-            <Text style={styles.centerStateText}>
-              Distance: {distanceKm} km • ETA: {etaMinutes} min
-            </Text>
-            <Text style={styles.centerStateText} numberOfLines={2}>
-              Customer: {customerName}
-            </Text>
           </View>
         ) : (
           <MapView style={styles.map} initialRegion={initialRegion} showsUserLocation>
@@ -326,6 +343,11 @@ export default function AgentRouteMapScreen({ navigation, route }) {
           ) : null}
 
           {routeError ? <Text style={styles.routeErrorText}>{routeError}</Text> : null}
+
+          <TouchableOpacity style={styles.arrivedButton} onPress={handleArrived}>
+            <Ionicons name="checkmark-circle" size={16} color={Colors.textWhite} />
+            <Text style={styles.arrivedButtonText}>Arrived / Start Task</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </SafeAreaView>
@@ -498,5 +520,21 @@ const styles = StyleSheet.create({
     width: '100%',
     fontSize: 12,
     color: '#B91C1C',
+  },
+  arrivedButton: {
+    width: '100%',
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 2,
+  },
+  arrivedButtonText: {
+    color: Colors.textWhite,
+    fontWeight: '700',
+    fontSize: 13,
   },
 });

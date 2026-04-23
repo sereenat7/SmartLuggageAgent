@@ -15,7 +15,7 @@ export default function BookingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const API_URL = "http://192.168.0.127:5000/api/bookings";
+  const API_URL = "http://192.168.8.247:5000/api/bookings";
 
   const fetchBookings = useCallback(async () => {
     setIsLoading(true);
@@ -111,12 +111,7 @@ export default function BookingsScreen() {
         })}
         activeOpacity={0.8}
       >
-        <LinearGradient 
-          colors={['#fff0f1', '#fff4ed']} 
-          start={{ x: 0, y: 0 }} 
-          end={{ x: 1, y: 1 }} 
-          style={styles.cardGradient}
-        >
+        <View style={styles.cardInternal}>
           <View style={styles.cardHeader}>
             <View>
               <Text style={styles.bookingId}>Booking #{item.booking_id}</Text>
@@ -152,7 +147,7 @@ export default function BookingsScreen() {
             </View>
             <Text style={styles.amountText}>₹{item.amount_paid}</Text>
           </View>
-        </LinearGradient>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -218,15 +213,16 @@ const styles = StyleSheet.create({
   card: { 
     marginBottom: 16, 
     borderRadius: 20,
-    overflow: 'hidden',
     backgroundColor: '#FFF',
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: '#F1F1F1',
+    elevation: 2,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 }
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 1 }
   },
-  cardGradient: { padding: 20 },
+  cardInternal: { padding: 20 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 },
   bookingId: { fontSize: 16, fontWeight: '800', color: '#1A1C1E' },
   flightInfo: { fontSize: 13, fontWeight: '600', color: '#ff6600', marginTop: 2 },
@@ -243,7 +239,7 @@ const styles = StyleSheet.create({
     height: 12,
     borderStyle: 'dashed',
     borderWidth: 1,
-    borderColor: '#CCC',
+    borderColor: '#EEE',
     borderRadius: 1,
   },
   pickupText: { fontSize: 14, fontWeight: '700', color: '#333', marginLeft: 10, flex: 1 },
@@ -251,7 +247,7 @@ const styles = StyleSheet.create({
   
   footerRow: { 
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)'
+    paddingTop: 12, borderTopWidth: 1, borderTopColor: '#FAFAFA'
   },
   metaInfo: { flexDirection: 'row', alignItems: 'center' },
   footerText: { marginLeft: 6, fontSize: 12, fontWeight: '600', color: '#666' },

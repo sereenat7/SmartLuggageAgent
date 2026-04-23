@@ -79,7 +79,15 @@ const initializeDatabase = (callback) => {
     `ALTER TABLE bookings ADD razorpay_order_id VARCHAR(100)`,
     `ALTER TABLE bookings ADD razorpay_payment_id VARCHAR(100)`,
     `ALTER TABLE bookings ADD amount DECIMAL(10, 2)`,
-    `ALTER TABLE bookings ADD payment_method VARCHAR(50)`
+    `ALTER TABLE bookings ADD payment_method VARCHAR(50)`,
+
+    // 6. Keep agent queue schema aligned with agent request handlers
+    `ALTER TABLE agent_queue ADD declined_agent_ids LONGTEXT NULL`,
+    `ALTER TABLE agent_queue ADD requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+    `ALTER TABLE agent_queue ADD updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`,
+
+    // 7. Tie active sessions to the exact booking that was accepted
+    `ALTER TABLE agent_sessions ADD booking_id INT NULL`
   ];
 
   let queryIndex = 0;

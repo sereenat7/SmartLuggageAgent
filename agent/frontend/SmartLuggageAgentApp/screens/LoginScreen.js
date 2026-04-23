@@ -4,6 +4,8 @@ import { View, Text, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platfor
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { API_URL } from '../config';
+import { USER_API_URL } from '../config';
+import * as Location from 'expo-location';
 import Colors from '../constants/colors';
 import LogoIcon from '../components/LogoIcon';
 
@@ -16,6 +18,44 @@ export default function LoginScreen({ navigation, route }) {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const syncLocationToMatcher = async (agent, token) => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        return;
+      }
+
+      let vehicleType = null;
+      try {
+        const kycResp = await fetch(`${API_URL}/api/kyc`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (kycResp.ok) {
+          const kycData = await kycResp.json();
+          vehicleType = kycData?.kyc?.vehicle_type || null;
+        }
+      } catch (_kycErr) {
+        // vehicle type unavailable on first sync; dashboard pings will set it
+      }
+
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      await fetch(`${USER_API_URL}/api/agents/agent-location`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: agent?.id,
+          phone: agent?.mobile,
+          name: agent?.fullName,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          vehicleType,
+        }),
+      });
+    } catch (error) {
+      console.log('Agent location sync skipped:', error.message);
+    }
+  };
 
   const handleLogin = async () => {
     if (mobile.trim() === '' || password.trim() === '') {
@@ -44,6 +84,7 @@ export default function LoginScreen({ navigation, route }) {
       }
 
       setLoading(false);
+      syncLocationToMatcher(data.user, data.token);
       // Store token securely? For now just navigate
       // Maybe params.token navigation?
       navigation.reset({
@@ -128,18 +169,19 @@ export default function LoginScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.select({ ios: 'padding', android: undefined })}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <LogoIcon size={64} borderRadius={16} />
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.select({ ios: 'padding', android: undefined })}>
+        <View style={styles.header}>
+          <LogoIcon size={64} borderRadius={12} />
           <Text style={styles.headerTitle}>Smart Luggage</Text>
-          <Text style={styles.headerSubtitle}>Agent Login</Text>
+          <Text style={styles.headerSubtitle}>Secure luggage pickup service</Text>
         </View>
-      </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.formCard}>
-          {/* Toggle Buttons */}
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <Text style={styles.sectionTitle}>{isLogin ? 'Login' : 'Sign Up'}</Text>
+          <Text style={styles.sectionSubtitle}>
+            {isLogin ? 'Access your account securely' : 'Create your account to start deliveries'}
+          </Text>
+
           <View style={styles.toggleContainer}>
             <TouchableOpacity
               style={[styles.toggleBtn, isLogin && styles.toggleBtnActive]}
@@ -156,17 +198,22 @@ export default function LoginScreen({ navigation, route }) {
           </View>
 
           {isLogin ? (
-            // LOGIN FORM
             <>
-              <Text style={styles.label}>Mobile Number / Agent ID</Text>
-              <TextInput
-                style={styles.input}
-                value={mobile}
-                onChangeText={setMobile}
-                placeholder="Enter your mobile number or agent ID"
-                keyboardType="phone-pad"
-                placeholderTextColor={Colors.textPlaceholder}
-              />
+              <Text style={styles.label}>Phone Number *</Text>
+              <View style={styles.phoneRow}>
+                <View style={styles.countryCodeBox}>
+                  <Text style={styles.countryCodeText}>+91</Text>
+                </View>
+                <TextInput
+                  style={[styles.input, styles.phoneInput]}
+                  value={mobile}
+                  onChangeText={setMobile}
+                  placeholder="Enter phone number"
+                  keyboardType="phone-pad"
+                  placeholderTextColor={Colors.textPlaceholder}
+                />
+              </View>
+
               <Text style={styles.label}>Password</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
@@ -178,35 +225,21 @@ export default function LoginScreen({ navigation, route }) {
                   placeholderTextColor={Colors.textPlaceholder}
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                  <Ionicons name={showPassword ? "eye" : "eye-off"} size={20} color={Colors.textSecondary} />
+                  <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color={Colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
               <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
-                <Text style={styles.loginText}>Login</Text>
+                <Text style={styles.loginText}>{loading ? 'Please wait...' : 'Login'}</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity>
-                <Text style={styles.forgotPassword}>Forgot Password?</Text>
+              <TouchableOpacity onPress={() => setIsLogin(false)}>
+                <Text style={styles.bottomLink}>Don't have an account? <Text style={styles.bottomLinkAccent}>Register</Text></Text>
               </TouchableOpacity>
-
-              <View style={styles.divider} />
-
-              <TouchableOpacity 
-                style={styles.guestButton} 
-                onPress={() => navigation.navigate('Guest')}
-              >
-                <Text style={styles.guestText}>Continue as Guest</Text>
-              </TouchableOpacity>
-
-              <Text style={styles.guestNote}>
-                Guest users can explore the app but must complete KYC to access tasks
-              </Text>
             </>
           ) : (
-            // SIGNUP FORM
             <>
-              <Text style={styles.label}>Full Name</Text>
+              <Text style={styles.label}>Full Name *</Text>
               <TextInput
                 style={styles.input}
                 value={name}
@@ -214,57 +247,63 @@ export default function LoginScreen({ navigation, route }) {
                 placeholder="Enter your full name"
                 placeholderTextColor={Colors.textPlaceholder}
               />
-              <Text style={styles.label}>Mobile Number</Text>
-              <TextInput
-                style={styles.input}
-                value={mobile}
-                onChangeText={setMobile}
-                placeholder="Enter your mobile number"
-                keyboardType="phone-pad"
-                placeholderTextColor={Colors.textPlaceholder}
-              />
-              <Text style={styles.label}>Password</Text>
+
+              <Text style={styles.label}>Phone Number *</Text>
+              <View style={styles.phoneRow}>
+                <View style={styles.countryCodeBox}>
+                  <Text style={styles.countryCodeText}>+91</Text>
+                </View>
+                <TextInput
+                  style={[styles.input, styles.phoneInput]}
+                  value={mobile}
+                  onChangeText={setMobile}
+                  placeholder="Enter phone number"
+                  keyboardType="phone-pad"
+                  placeholderTextColor={Colors.textPlaceholder}
+                />
+              </View>
+
+              <Text style={styles.label}>Password *</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={styles.passwordInput}
                   value={password}
                   onChangeText={setPassword}
-                  placeholder="Create a password"
+                  placeholder="Create password"
                   secureTextEntry={!showPassword}
                   placeholderTextColor={Colors.textPlaceholder}
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
-                  <Ionicons name={showPassword ? "eye" : "eye-off"} size={20} color={Colors.textSecondary} />
+                  <Ionicons name={showPassword ? 'eye' : 'eye-off'} size={20} color={Colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.label}>Confirm Password</Text>
+              <Text style={styles.label}>Confirm Password *</Text>
               <View style={styles.passwordContainer}>
                 <TextInput
                   style={styles.passwordInput}
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
-                  placeholder="Confirm your password"
+                  placeholder="Confirm password"
                   secureTextEntry={!showConfirmPassword}
                   placeholderTextColor={Colors.textPlaceholder}
                 />
                 <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIcon}>
-                  <Ionicons name={showConfirmPassword ? "eye" : "eye-off"} size={20} color={Colors.textSecondary} />
+                  <Ionicons name={showConfirmPassword ? 'eye' : 'eye-off'} size={20} color={Colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
               <TouchableOpacity style={styles.loginButton} onPress={handleSignup}>
-                <Text style={styles.loginText}>Create Account</Text>
+                <Text style={styles.loginText}>{loading ? 'Please wait...' : 'Create Account'}</Text>
               </TouchableOpacity>
 
-              <Text style={styles.signupNote}>
-                After signup, complete KYC verification to start accepting deliveries.
-              </Text>
+              <TouchableOpacity onPress={() => setIsLogin(true)}>
+                <Text style={styles.bottomLink}>Already have an account? <Text style={styles.bottomLinkAccent}>Login</Text></Text>
+              </TouchableOpacity>
             </>
           )}
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -272,91 +311,117 @@ export default function LoginScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FF5252',
+    backgroundColor: '#F2F3F7',
   },
   container: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#F2F3F7',
   },
   header: {
-    backgroundColor: '#FF5252',
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 20,
     paddingTop: 20,
-    paddingBottom: 30,
+    paddingBottom: 28,
     alignItems: 'center',
-  },
-  headerContent: {
-    alignItems: 'center',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
   },
   headerTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: Colors.textWhite,
-    marginBottom: 5,
+    marginTop: 10,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: Colors.textWhite,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.92)',
+    marginTop: 2,
   },
   scrollContent: {
-    paddingBottom: 20,
-  },
-  formCard: {
-    marginHorizontal: 16,
-    marginTop: 20,
-    backgroundColor: Colors.background,
-    borderRadius: 16,
+    paddingHorizontal: 16,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    paddingBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#1E1F23',
+    marginBottom: 6,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#6F727B',
+    marginBottom: 18,
   },
   toggleContainer: {
     flexDirection: 'row',
-    marginBottom: 20,
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 10,
+    marginBottom: 18,
+    alignSelf: 'flex-start',
+    backgroundColor: '#ECEEF3',
+    borderRadius: 999,
     padding: 4,
   },
   toggleBtn: {
-    flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 999,
   },
   toggleBtnActive: {
-    backgroundColor: Colors.buttonPrimary,
+    backgroundColor: 'rgba(255,102,0,0.12)',
   },
   toggleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.textSecondary,
+    color: '#666B75',
   },
   toggleTextActive: {
-    color: Colors.textWhite,
+    color: Colors.primary,
   },
   label: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: Colors.textPrimary,
+    color: '#1F2329',
     marginBottom: 8,
-    marginTop: 12,
+    marginTop: 10,
+  },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  countryCodeBox: {
+    backgroundColor: '#E8ECF3',
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    borderRadius: 12,
+    height: 52,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    marginRight: 8,
+  },
+  countryCodeText: {
+    color: '#2B2E33',
+    fontSize: 13,
+    fontWeight: '600',
   },
   input: {
-    backgroundColor: Colors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
+    backgroundColor: '#E8ECF3',
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 14,
-    color: Colors.textPrimary,
+    color: '#2B2E33',
+  },
+  phoneInput: {
+    flex: 1,
+    height: 52,
   },
   loginButton: {
     backgroundColor: Colors.buttonPrimary,
     paddingVertical: 14,
-    borderRadius: 10,
+    borderRadius: 24,
     marginTop: 20,
     alignItems: 'center',
     shadowColor: '#000',
@@ -368,59 +433,33 @@ const styles = StyleSheet.create({
   loginText: {
     color: Colors.textWhite,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 15,
   },
-  forgotPassword: {
+  bottomLink: {
+    fontSize: 12,
+    color: '#7B7F88',
+    marginTop: 12,
     textAlign: 'center',
-    color: Colors.buttonPrimary,
-    marginTop: 14,
     fontWeight: '500',
   },
-  divider: {
-    height: 1,
-    backgroundColor: Colors.border,
-    marginVertical: 16,
-  },
-  guestButton: {
-    paddingVertical: 14,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    alignItems: 'center',
-  },
-  guestText: {
-    color: Colors.textPrimary,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  guestNote: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 12,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  signupNote: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 12,
-    textAlign: 'center',
-    lineHeight: 18,
+  bottomLinkAccent: {
+    color: Colors.primary,
+    fontWeight: '700',
   },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
+    backgroundColor: '#E8ECF3',
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    borderRadius: 12,
     paddingHorizontal: 14,
+    height: 52,
   },
   passwordInput: {
     flex: 1,
-    paddingVertical: 12,
     fontSize: 14,
-    color: Colors.textPrimary,
+    color: '#2B2E33',
   },
   eyeIcon: {
     marginLeft: 10,

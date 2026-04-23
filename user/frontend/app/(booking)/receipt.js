@@ -74,7 +74,7 @@ export default function ReceiptScreen() {
       // Try to fetch booking details
       try {
         const response = await fetch(
-          `http://192.168.0.127:5000/api/bookings/${bookingId}`,
+          `http://192.168.8.247:5000/api/bookings/${bookingId}`,
           {
             method: 'GET',
             headers: {

@@ -46,6 +46,27 @@ function pick(obj, keys) {
   return out;
 }
 
+async function ensureKycComponentsTable() {
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS kyc_components (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL,
+      kyc_id BIGINT UNSIGNED NOT NULL,
+      component_key VARCHAR(80) NOT NULL,
+      component_payload JSON NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_kyc_component (kyc_id, component_key),
+      KEY idx_kyc_components_user (user_id),
+      KEY idx_kyc_components_kyc (kyc_id),
+      CONSTRAINT fk_kyc_components_agent FOREIGN KEY (user_id) REFERENCES agents(id) ON DELETE CASCADE,
+      CONSTRAINT fk_kyc_components_kyc FOREIGN KEY (kyc_id) REFERENCES kyc(id) ON DELETE CASCADE
+    )
+  `);
+}
+
 const app = express();
 app.disable("x-powered-by");
 app.use(morgan("dev"));
@@ -113,6 +134,11 @@ app.get("/api/kyc", requireAuth, async (req, res) => {
   const [kycRows] = await pool.query("SELECT * FROM kyc WHERE user_id = ? LIMIT 1", [req.user.id]);
   const kyc = kycRows[0] || null;
 
+  const [componentRows] = await pool.query(
+    "SELECT component_key, component_payload, created_at, updated_at FROM kyc_components WHERE user_id = ? ORDER BY id ASC",
+    [req.user.id]
+  );
+
   const [fileRows] = await pool.query(
     "SELECT field_name, original_name, mime_type, file_path, created_at FROM kyc_files WHERE user_id = ? ORDER BY created_at DESC",
     [req.user.id]
@@ -120,6 +146,12 @@ app.get("/api/kyc", requireAuth, async (req, res) => {
 
   return res.json({
     kyc,
+    components: componentRows.map((row) => ({
+      key: row.component_key,
+      payload: row.component_payload,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    })),
     files: fileRows.map((f) => ({
       fieldName: f.field_name,
       originalName: f.original_name,
@@ -210,13 +242,117 @@ app.post(
 
     const files = req.files || {};
     const accepted = ["idFront", "idBack", "addressProof", "selfie", "vehicleDocument", "drivingLicense"];
+    const fileMeta = {};
     for (const fieldName of accepted) {
       const file = Array.isArray(files[fieldName]) ? files[fieldName][0] : null;
       if (!file) continue;
 
+      fileMeta[fieldName] = {
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        path: file.path,
+        url: `/uploads/${path.basename(file.path)}`,
+      };
+
       await pool.query(
         "INSERT INTO kyc_files (user_id, kyc_id, field_name, original_name, mime_type, file_path) VALUES (?, ?, ?, ?, ?, ?)",
         [req.user.id, kycId, fieldName, file.originalname, file.mimetype, file.path]
+      );
+    }
+
+    const componentPayloads = [
+      {
+        componentKey: "step1_personal_info",
+        payload: {
+          fullName: data.fullName || "",
+          email: data.email || "",
+          phone: data.phone || "",
+          dateOfBirth: data.dateOfBirth || "",
+          nationality: data.nationality || "",
+        },
+      },
+      {
+        componentKey: "step2_government_id",
+        payload: {
+          idType: data.idType || "",
+          idNumber: data.idNumber || "",
+          idFront: fileMeta.idFront || null,
+          idBack: fileMeta.idBack || null,
+        },
+      },
+      {
+        componentKey: "step3_address",
+        payload: {
+          streetAddress: data.streetAddress || "",
+          city: data.city || "",
+          state: data.state || "",
+          postalCode: data.postalCode || "",
+          country: data.country || "",
+          isPermAddressDifferent: Boolean(data.isPermAddressDifferent),
+          permStreetAddress: data.permStreetAddress || "",
+          permCity: data.permCity || "",
+          permState: data.permState || "",
+          permPostalCode: data.permPostalCode || "",
+          permCountry: data.permCountry || "",
+          addressProof: fileMeta.addressProof || null,
+        },
+      },
+      {
+        componentKey: "step4_facial_recognition",
+        payload: {
+          selfie: fileMeta.selfie || null,
+        },
+      },
+      {
+        componentKey: "step5_bank_details",
+        payload: {
+          accountName: data.accountName || "",
+          bankName: data.bankName || "",
+          accountNumber: data.accountNumber || "",
+          ifscCode: data.ifscCode || "",
+          branchName: data.branchName || "",
+        },
+      },
+      {
+        componentKey: "step6_vehicle_details",
+        payload: {
+          vehicleType: data.vehicleType || "",
+          vehicleModel: data.vehicleModel || "",
+          vehicleColor: data.vehicleColor || "",
+          licensePlate: data.licensePlate || "",
+          registrationNumber: data.registrationNumber || "",
+          vehicleDocument: fileMeta.vehicleDocument || null,
+          drivingLicense: fileMeta.drivingLicense || null,
+        },
+      },
+      {
+        componentKey: "step7_emergency_contact",
+        payload: {
+          emergencyName: data.emergencyName || "",
+          emergencyRelation: data.emergencyRelation || "",
+          emergencyPhone: data.emergencyPhone || "",
+          emergencyAltPhone: data.emergencyAltPhone || "",
+          emergencyEmail: data.emergencyEmail || "",
+          emergencyAddress: data.emergencyAddress || "",
+        },
+      },
+      {
+        componentKey: "step8_consent",
+        payload: {
+          confirmAccuracy: Boolean(data.confirmAccuracy),
+          agreeTerms: Boolean(data.agreeTerms),
+          agreePrivacy: Boolean(data.agreePrivacy),
+          agreeCommunications: Boolean(data.agreeCommunications),
+        },
+      },
+    ];
+
+    await pool.query("DELETE FROM kyc_components WHERE kyc_id = ?", [kycId]);
+    for (const component of componentPayloads) {
+      await pool.query(
+        `INSERT INTO kyc_components (user_id, kyc_id, component_key, component_payload)
+         VALUES (?, ?, ?, ?)` ,
+        [req.user.id, kycId, component.componentKey, JSON.stringify(component.payload)]
       );
     }
 
@@ -242,6 +378,6 @@ app.use((err, _req, res, _next) => {
 app.listen(PORT, '0.0.0.0', async () => {
   // eslint-disable-next-line no-console
   console.log(`API running on http://localhost:${PORT}`);
+  await ensureKycComponentsTable();
   await testConnection();
 });
-

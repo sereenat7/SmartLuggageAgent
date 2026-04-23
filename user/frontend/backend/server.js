@@ -6,6 +6,7 @@ const https = require("https");
 const authRoutes = require("./routes/auth");
 const bookingRoutes = require("./routes/bookings");
 const paymentRoutes = require("./routes/payment");
+const agentRoutes = require("./routes/agents");
 const initializeDatabase = require("./initDB");
 
 const app = express();
@@ -159,6 +160,7 @@ app.post("/api/geocode", async (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/agents", agentRoutes);
 
 // DEBUG endpoint - Get all users
 app.get("/api/debug/all-users", (req, res) => {

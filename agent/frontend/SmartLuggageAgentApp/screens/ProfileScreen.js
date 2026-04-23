@@ -15,6 +15,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CommonActions } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '../constants/colors';
 
 import { API_URL } from '../config';
@@ -25,6 +27,8 @@ const IS_SMALL_DEVICE = SCREEN_WIDTH < 380;
 export default function ProfileScreen({ navigation, route }) {
   const { agentData, token } = route.params || {};
   const [loading, setLoading] = useState(false);
+  const [kycComponents, setKycComponents] = useState([]);
+  const [kycFiles, setKycFiles] = useState([]);
   
   const [profileData, setProfileData] = useState({
     fullName: agentData?.fullName || agentData?.full_name || '',
@@ -75,8 +79,14 @@ export default function ProfileScreen({ navigation, route }) {
           emergencyContactName: kyc.emergency_name || kyc.emergencyContactName || '',
           emergencyContactPhone: kyc.emergency_phone || kyc.emergencyContactPhone || '',
         });
+        setKycComponents(Array.isArray(data.components) ? data.components : []);
+        setKycFiles(Array.isArray(data.files) ? data.files : []);
+      } else if (resp.ok && !data.kyc) {
+        console.log('ProfileScreen: No KYC data yet for this agent');
+        setKycComponents(Array.isArray(data.components) ? data.components : []);
+        setKycFiles(Array.isArray(data.files) ? data.files : []);
       } else {
-         console.log('ProfileScreen: Fetch failed or no KYC data', resp.status, data);
+         console.log('ProfileScreen: Fetch failed', resp.status, data);
       }
     } catch (err) {
       console.error('Error fetching profile in ProfileScreen:', err);
@@ -94,6 +104,16 @@ export default function ProfileScreen({ navigation, route }) {
   const onRefresh = React.useCallback(() => {
     fetchProfile();
   }, [token]);
+
+  const openKycStep = (startStep) => {
+    navigation.navigate('KYCForm', {
+      token,
+      agentName: profileData.fullName,
+      agentPhone: profileData.phone,
+      userId: agentData?.id,
+      startStep,
+    });
+  };
 
 
   const doLogout = () => {
@@ -121,17 +141,41 @@ export default function ProfileScreen({ navigation, route }) {
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>My Profile</Text>
-          <View style={styles.spacer} />
-        </View>
+        <LinearGradient
+          colors={['#FF1F1F', '#FF8C00']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0.8 }}
+          style={styles.headerGradient}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <Ionicons name="arrow-back" size={IS_SMALL_DEVICE ? 20 : 24} color={Colors.textWhite} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>My Profile</Text>
+            <View style={styles.spacer} />
+          </View>
+
+          <View style={styles.topPanel}>
+            <View style={styles.avatarSection}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>
+                  {profileData.fullName
+                    ? profileData.fullName.split(' ').map(n => n[0]).join('')
+                    : 'AG'}
+                </Text>
+              </View>
+              <Text style={styles.agentName}>{profileData.fullName || 'Agent Name'}</Text>
+              <View style={styles.contactRow}>
+                <Ionicons name="call-outline" size={16} color={Colors.textWhite} />
+                <Text style={styles.agentPhone}>{profileData.phone || 'Phone Number'}</Text>
+              </View>
+            </View>
+          </View>
+        </LinearGradient>
 
       <ScrollView 
         style={styles.scrollContent} 
@@ -141,114 +185,68 @@ export default function ProfileScreen({ navigation, route }) {
           <RefreshControl refreshing={loading} onRefresh={onRefresh} />
         }
       >
-        {/* Profile Avatar */}
-        <View style={styles.avatarSection}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {profileData.fullName
-                ? profileData.fullName.split(' ').map(n => n[0]).join('')
-                : 'AG'}
-            </Text>
-          </View>
-          <Text style={styles.agentName}>{profileData.fullName || 'Agent Name'}</Text>
-          <Text style={styles.agentPhone}>{profileData.phone || 'Phone Number'}</Text>
-
-          <TouchableOpacity style={styles.editProfileBtn} onPress={() => navigation.navigate('KYCForm', {
-            token: token,
-            agentName: profileData.fullName,
-            agentPhone: profileData.phone,
-            userId: agentData?.id
-          })}>
-            <Text style={styles.editProfileBtnText}>Complete Verification / Edit</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Personal Information */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Personal Information</Text>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>Full Name</Text>
-            <Text style={styles.value}>{profileData.fullName || 'N/A'}</Text>
+        <View style={styles.settingsSection}>
+          <Text style={styles.sectionHeader}>ACCOUNT</Text>
+          <View style={styles.listCard}>
+            <SettingsRow
+              icon="person-outline"
+              title="Edit Profile"
+              color="#4F46E5"
+              background="#EEF2FF"
+              onPress={() => openKycStep(0)}
+            />
+            <View style={styles.rowDivider} />
+            <SettingsRow
+              icon="create-outline"
+              title="Complete Verification"
+              color="#E11D48"
+              background="#FFE4E6"
+              onPress={() => openKycStep(0)}
+            />
           </View>
 
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>Email</Text>
-            <Text style={styles.value}>{profileData.email || 'N/A'}</Text>
-          </View>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>Phone</Text>
-            <Text style={styles.value}>{profileData.phone || 'N/A'}</Text>
-          </View>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>Date of Birth</Text>
-            <Text style={styles.value}>{profileData.dateOfBirth || 'N/A'}</Text>
-          </View>
-        </View>
-
-        {/* Identity Information */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Identity Information</Text>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>ID Number</Text>
-            <Text style={styles.value}>{profileData.idNumber || 'N/A'}</Text>
-          </View>
-        </View>
-
-        {/* Address Information */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Address</Text>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>Street Address</Text>
-            <Text style={styles.value}>{profileData.streetAddress || 'N/A'}</Text>
-          </View>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>City</Text>
-            <Text style={styles.value}>{profileData.city || 'N/A'}</Text>
-          </View>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>State</Text>
-            <Text style={styles.value}>{profileData.state || 'N/A'}</Text>
-          </View>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>Postal Code</Text>
-            <Text style={styles.value}>{profileData.postalCode || 'N/A'}</Text>
-          </View>
-        </View>
-
-        {/* Bank Details */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Bank Details</Text>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>Account Number</Text>
-            <Text style={styles.value}>
-              {profileData.bankAccountNumber
-                ? `****${profileData.bankAccountNumber.slice(-4)}`
-                : 'N/A'}
+          <View style={styles.savedAddressCard}>
+            <Text style={styles.savedAddressLabel}>Saved Address</Text>
+            <Text style={styles.savedAddressText} numberOfLines={2}>
+              {profileData.streetAddress || 'N/A'}
             </Text>
           </View>
         </View>
 
-        {/* Emergency Contact */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Emergency Contact</Text>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>Contact Name</Text>
-            <Text style={styles.value}>{profileData.emergencyContactName || 'N/A'}</Text>
-          </View>
-
-          <View style={styles.infoGroup}>
-            <Text style={styles.label}>Contact Phone</Text>
-            <Text style={styles.value}>{profileData.emergencyContactPhone || 'N/A'}</Text>
+        <View style={styles.settingsSection}>
+          <Text style={styles.sectionHeader}>VERIFICATION</Text>
+          <View style={styles.listCard}>
+            <SettingsRow
+              icon="document-text-outline"
+              title="Documents"
+              color="#10B981"
+              background="#ECFDF5"
+              onPress={() => openKycStep(1)}
+            />
+            <View style={styles.rowDivider} />
+            <SettingsRow
+              icon="home-outline"
+              title="Address"
+              color="#F59E0B"
+              background="#FFF7ED"
+              onPress={() => openKycStep(2)}
+            />
+            <View style={styles.rowDivider} />
+            <SettingsRow
+              icon="card-outline"
+              title="Bank Details"
+              color="#8B5CF6"
+              background="#F5F3FF"
+              onPress={() => openKycStep(4)}
+            />
+            <View style={styles.rowDivider} />
+            <SettingsRow
+              icon="people-outline"
+              title="Emergency Contact"
+              color="#DB2777"
+              background="#FCE7F3"
+              onPress={() => openKycStep(6)}
+            />
           </View>
         </View>
 
@@ -270,19 +268,40 @@ export default function ProfileScreen({ navigation, route }) {
   );
 }
 
+function formatComponentName(key) {
+  if (!key) return 'KYC Component';
+  return key
+    .replace(/^step\d+_/, '')
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatFieldName(field) {
+  return field
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FF5252',
+    backgroundColor: '#F8FAFC',
   },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
   },
+  headerGradient: {
+    borderBottomLeftRadius: 34,
+    borderBottomRightRadius: 34,
+    overflow: 'hidden',
+    paddingBottom: 4,
+  },
   header: {
-    backgroundColor: '#FF5252',
     paddingTop: 14,
-    paddingBottom: 18,
+    paddingBottom: 12,
     paddingHorizontal: IS_SMALL_DEVICE ? 12 : 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -313,9 +332,129 @@ const styles = StyleSheet.create({
     padding: IS_SMALL_DEVICE ? 10 : 16,
     paddingBottom: 20,
   },
+  topPanel: {
+    paddingHorizontal: IS_SMALL_DEVICE ? 16 : 20,
+    paddingBottom: 18,
+  },
+  settingsIntro: {
+    marginBottom: 14,
+  },
+  settingsTag: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#ff6600',
+    letterSpacing: 1.4,
+    marginBottom: 6,
+  },
+  settingsTitle: {
+    fontSize: IS_SMALL_DEVICE ? 18 : 20,
+    fontWeight: '800',
+    color: Colors.textPrimary,
+    marginBottom: 6,
+  },
+  settingsSubtitle: {
+    fontSize: IS_SMALL_DEVICE ? 12 : 13,
+    color: Colors.textSecondary,
+    lineHeight: 18,
+  },
+  settingsSection: {
+    marginBottom: 14,
+  },
+  sectionHeader: {
+    fontSize: IS_SMALL_DEVICE ? 12 : 13,
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 1.2,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  listCard: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  rowDivider: {
+    height: 1,
+    backgroundColor: Colors.borderLight,
+    marginLeft: 74,
+  },
+  savedAddressCard: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  savedAddressLabel: {
+    fontSize: IS_SMALL_DEVICE ? 11 : 12,
+    color: Colors.textSecondary,
+    fontWeight: '700',
+    marginBottom: 8,
+    letterSpacing: 0.6,
+  },
+  savedAddressText: {
+    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  summaryLabel: {
+    fontSize: IS_SMALL_DEVICE ? 12 : 13,
+    color: Colors.textSecondary,
+    fontWeight: '600',
+  },
+  summaryValue: {
+    fontSize: IS_SMALL_DEVICE ? 12 : 13,
+    color: Colors.textPrimary,
+    fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  settingsIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  settingsRowTitle: {
+    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    flex: 1,
+  },
   avatarSection: {
     alignItems: 'center',
-    marginVertical: IS_SMALL_DEVICE ? 14 : 20,
+    marginTop: 8,
   },
   avatar: {
     width: IS_SMALL_DEVICE ? 76 : 100,
@@ -337,15 +476,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   agentName: {
-    fontSize: IS_SMALL_DEVICE ? 16 : 18,
+    fontSize: IS_SMALL_DEVICE ? 18 : 20,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: Colors.textWhite,
     marginBottom: 4,
   },
   agentPhone: {
     fontSize: IS_SMALL_DEVICE ? 12 : 13,
-    color: Colors.textSecondary,
+    color: 'rgba(255,255,255,0.92)',
     marginBottom: 8,
+    marginLeft: 6,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   editProfileBtn: {
     backgroundColor: Colors.buttonPrimary,
@@ -429,4 +573,46 @@ const styles = StyleSheet.create({
   spacerBottom: {
     height: 8,
   },
+  componentBlock: {
+    marginBottom: 14,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  componentTitle: {
+    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginBottom: 8,
+  },
+  componentRow: {
+    marginBottom: 10,
+  },
+  componentField: {
+    fontSize: IS_SMALL_DEVICE ? 11 : 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+    marginBottom: 2,
+  },
+  componentValue: {
+    fontSize: IS_SMALL_DEVICE ? 13 : 14,
+    color: Colors.textPrimary,
+  },
+  componentEmpty: {
+    fontSize: IS_SMALL_DEVICE ? 12 : 13,
+    color: Colors.textSecondary,
+    fontStyle: 'italic',
+  },
 });
+
+function SettingsRow({ icon, title, color, background, onPress }) {
+  return (
+    <TouchableOpacity style={styles.settingsRow} onPress={onPress} activeOpacity={0.85}>
+      <View style={[styles.settingsIconWrap, { backgroundColor: background }]}>
+        <Ionicons name={icon} size={20} color={color} />
+      </View>
+      <Text style={styles.settingsRowTitle}>{title}</Text>
+      <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+    </TouchableOpacity>
+  );
+}

@@ -4,6 +4,7 @@
 DROP TABLE IF EXISTS booking_luggage_photos;
 DROP TABLE IF EXISTS booking_locations;
 DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS kyc_components;
 DROP TABLE IF EXISTS kyc_files;
 DROP TABLE IF EXISTS kyc;
 DROP TABLE IF EXISTS agents;
@@ -41,6 +42,14 @@ CREATE TABLE kyc (
   postal_code VARCHAR(32) NULL,
   country VARCHAR(120) NULL,
 
+  -- Step 3 permanent address (optional)
+  is_perm_address_different TINYINT(1) NOT NULL DEFAULT 0,
+  perm_street_address TEXT NULL,
+  perm_city VARCHAR(120) NULL,
+  perm_state VARCHAR(120) NULL,
+  perm_postal_code VARCHAR(32) NULL,
+  perm_country VARCHAR(120) NULL,
+
   -- Step 5
   account_name VARCHAR(160) NULL,
   bank_name VARCHAR(160) NULL,
@@ -76,6 +85,22 @@ CREATE TABLE kyc (
   PRIMARY KEY (id),
   UNIQUE KEY uq_kyc_user (user_id),
   CONSTRAINT fk_kyc_agent FOREIGN KEY (user_id) REFERENCES agents(id) ON DELETE CASCADE
+);
+
+CREATE TABLE kyc_components (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  kyc_id BIGINT UNSIGNED NOT NULL,
+  component_key VARCHAR(80) NOT NULL,
+  component_payload JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_kyc_component (kyc_id, component_key),
+  KEY idx_kyc_components_user (user_id),
+  KEY idx_kyc_components_kyc (kyc_id),
+  CONSTRAINT fk_kyc_components_agent FOREIGN KEY (user_id) REFERENCES agents(id) ON DELETE CASCADE,
+  CONSTRAINT fk_kyc_components_kyc FOREIGN KEY (kyc_id) REFERENCES kyc(id) ON DELETE CASCADE
 );
 
 CREATE TABLE kyc_files (
@@ -185,4 +210,3 @@ CREATE TABLE booking_luggage_photos (
   KEY idx_luggage_photos_booking (booking_id),
   CONSTRAINT fk_luggage_photos_booking FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
 );
-

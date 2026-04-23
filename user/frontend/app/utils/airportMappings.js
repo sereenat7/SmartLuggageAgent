@@ -27,7 +27,7 @@ export const normalizeAirportName = (airportName) => {
 const fetchCoordinatesFromGeoapify = async (address) => {
   try {
     const response = await fetch(
-      'http://192.168.0.127:5000/api/geocode',
+      'http://192.168.8.247:5000/api/geocode',
       {
         method: 'POST',
         headers: {

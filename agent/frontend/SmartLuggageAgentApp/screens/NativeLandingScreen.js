@@ -1,4 +1,4 @@
-// screens/NativeLandingScreen.js
+﻿// screens/NativeLandingScreen.js
 // Mobile landing page matching the web design: dark hero, bold headline,
 // Register / Login / Guest CTAs.
 import React, { useEffect, useRef } from 'react';
@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import LogoIcon from '../components/LogoIcon';
 
 const { width: W } = Dimensions.get('window');
-const PRIMARY = '#E8521A';
+const PRIMARY = '#ff6600';
 const BG      = '#FFFFFF';
 
 export default function NativeLandingScreen({ navigation }) {
@@ -62,7 +62,6 @@ export default function NativeLandingScreen({ navigation }) {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Nav bar ────────────────────────────────────────────────── */}
         <View style={styles.navbar}>
           <View style={styles.navBrand}>
             <LogoIcon size={36} borderRadius={9} />
@@ -77,116 +76,109 @@ export default function NativeLandingScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* ── Badge ──────────────────────────────────────────────────── */}
-        <Animated.View
-          style={[
-            styles.badge,
-            { opacity: heroOpacity, transform: [{ translateY: heroY }] },
-          ]}
-        >
-          <View style={styles.badgeDot} />
-          <Text style={styles.badgeText}>
-            Official Agent Portal — Smart Luggage System
-          </Text>
-        </Animated.View>
+        <View style={styles.heroCard}>
+          <View style={styles.heroStrip} />
 
-        {/* ── Hero headline ──────────────────────────────────────────── */}
-        <Animated.View
-          style={{ opacity: heroOpacity, transform: [{ translateY: heroY }] }}
-        >
-          <Text style={styles.heroLine}>Handle Luggage.</Text>
-          <Text style={[styles.heroLine, styles.heroAccent]}>Build Trust.</Text>
-          <Text style={styles.heroLine}>Earn Reliably.</Text>
-        </Animated.View>
-
-        {/* ── Sub-copy ───────────────────────────────────────────────── */}
-        <Animated.Text
-          style={[
-            styles.subCopy,
-            { opacity: heroOpacity, transform: [{ translateY: heroY }] },
-          ]}
-        >
-          Join a verified network of airline luggage agents. Manage pickups,
-          deliveries, and digital check-ins through one secure, professional
-          platform designed for field agents.
-        </Animated.Text>
-
-        {/* ── Feature pills ──────────────────────────────────────────── */}
-        <Animated.View
-          style={[
-            styles.pills,
-            { opacity: heroOpacity, transform: [{ translateY: heroY }] },
-          ]}
-        >
-          {[
-            { icon: 'shield-checkmark-outline', label: 'KYC Verified' },
-            { icon: 'briefcase-outline',        label: 'Instant Tasks' },
-            { icon: 'cash-outline',             label: 'Fast Payouts' },
-          ].map((p) => (
-            <View key={p.label} style={styles.pill}>
-              <Ionicons name={p.icon} size={13} color={PRIMARY} />
-              <Text style={styles.pillText}>{p.label}</Text>
-            </View>
-          ))}
-        </Animated.View>
-
-        {/* ── CTAs ───────────────────────────────────────────────────── */}
-        <Animated.View
-          style={[
-            styles.ctas,
-            { opacity: ctaOpacity, transform: [{ translateY: ctaY }] },
-          ]}
-        >
-          {/* Primary CTA */}
-          <TouchableOpacity
-            style={styles.primaryBtn}
-            onPress={() => navigation.navigate('Login', { showSignUp: true })}
-            activeOpacity={0.85}
+          <Animated.View
+            style={[
+              styles.badge,
+              { opacity: heroOpacity, transform: [{ translateY: heroY }] },
+            ]}
           >
-            <Ionicons name="rocket-outline" size={18} color="#fff" />
-            <Text style={styles.primaryBtnText}>Register as Agent</Text>
-          </TouchableOpacity>
+            <View style={styles.badgeDot} />
+            <Text style={styles.badgeText}>Official Agent Portal - Smart Luggage System</Text>
+          </Animated.View>
 
-          {/* Login CTA */}
-          <TouchableOpacity
-            style={styles.secondaryBtn}
-            onPress={() => navigation.navigate('Login', { showSignUp: false })}
-            activeOpacity={0.85}
+          <Animated.View
+            style={{ opacity: heroOpacity, transform: [{ translateY: heroY }] }}
           >
-            <Text style={styles.secondaryBtnText}>Agent Login</Text>
-            <Ionicons name="arrow-forward" size={16} color="#1A1A1A" />
-          </TouchableOpacity>
+            <Text style={styles.heroLine}>Handle Luggage.</Text>
+            <Text style={[styles.heroLine, styles.heroAccent]}>Build Trust.</Text>
+            <Text style={styles.heroLine}>Earn Reliably.</Text>
+          </Animated.View>
 
-          {/* Guest link */}
-          <TouchableOpacity
-            onPress={() => navigation.navigate('Guest')}
-            activeOpacity={0.7}
+          <Animated.Text
+            style={[
+              styles.subCopy,
+              { opacity: heroOpacity, transform: [{ translateY: heroY }] },
+            ]}
           >
-            <Text style={styles.guestLink}>Continue as Guest</Text>
-          </TouchableOpacity>
-        </Animated.View>
+            Join a verified network of airline luggage agents. Manage pickups,
+            deliveries, and digital check-ins through one secure, professional
+            platform designed for field agents.
+          </Animated.Text>
 
-        {/* ── Divider + stats ────────────────────────────────────────── */}
-        <Animated.View
-          style={[
-            styles.statsRow,
-            { opacity: ctaOpacity },
-          ]}
-        >
-          {[
-            { value: '500+', label: 'Active Agents' },
-            { value: '99%', label: 'Delivery Rate' },
-            { value: '24/7', label: 'Support' },
-          ].map((s, i) => (
-            <React.Fragment key={s.label}>
-              {i > 0 && <View style={styles.statDivider} />}
-              <View style={styles.stat}>
-                <Text style={styles.statValue}>{s.value}</Text>
-                <Text style={styles.statLabel}>{s.label}</Text>
+          <Animated.View
+            style={[
+              styles.pills,
+              { opacity: heroOpacity, transform: [{ translateY: heroY }] },
+            ]}
+          >
+            {[
+              { icon: 'shield-checkmark-outline', label: 'KYC Verified' },
+              { icon: 'briefcase-outline', label: 'Instant Tasks' },
+              { icon: 'cash-outline', label: 'Fast Payouts' },
+            ].map((p) => (
+              <View key={p.label} style={styles.pill}>
+                <Ionicons name={p.icon} size={13} color={PRIMARY} />
+                <Text style={styles.pillText}>{p.label}</Text>
               </View>
-            </React.Fragment>
-          ))}
-        </Animated.View>
+            ))}
+          </Animated.View>
+
+          <Animated.View
+            style={[
+              styles.ctas,
+              { opacity: ctaOpacity, transform: [{ translateY: ctaY }] },
+            ]}
+          >
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => navigation.navigate('Login', { showSignUp: true })}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="rocket-outline" size={18} color="#fff" />
+              <Text style={styles.primaryBtnText}>Register as Agent</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.secondaryBtn}
+              onPress={() => navigation.navigate('Login', { showSignUp: false })}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.secondaryBtnText}>Agent Login</Text>
+              <Ionicons name="arrow-forward" size={16} color="#1A1A1A" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Guest')}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.guestLink}>Continue as Guest</Text>
+            </TouchableOpacity>
+          </Animated.View>
+
+          <Animated.View
+            style={[
+              styles.statsRow,
+              { opacity: ctaOpacity },
+            ]}
+          >
+            {[
+              { value: '500+', label: 'Active Agents' },
+              { value: '99%', label: 'Delivery Rate' },
+              { value: '24/7', label: 'Support' },
+            ].map((s, i) => (
+              <React.Fragment key={s.label}>
+                {i > 0 && <View style={styles.statDivider} />}
+                <View style={styles.stat}>
+                  <Text style={styles.statValue}>{s.value}</Text>
+                  <Text style={styles.statLabel}>{s.label}</Text>
+                </View>
+              </React.Fragment>
+            ))}
+          </Animated.View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -201,6 +193,32 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingBottom: 32,
+  },
+
+  heroCard: {
+    marginTop: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 32,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 102, 0, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.08,
+    shadowRadius: 32,
+    elevation: 6,
+  },
+  heroStrip: {
+    position: 'absolute',
+    top: 0,
+    left: 18,
+    right: 18,
+    height: 7,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    backgroundColor: PRIMARY,
   },
 
   // Nav
@@ -263,11 +281,11 @@ const styles = StyleSheet.create({
 
   // Hero
   heroLine: {
-    fontSize: W < 380 ? 34 : 38,
+    fontSize: W < 380 ? 32 : 36,
     fontWeight: '800',
     color: '#1A1A1A',
     letterSpacing: -1,
-    lineHeight: W < 380 ? 42 : 46,
+    lineHeight: W < 380 ? 40 : 44,
   },
   heroAccent: {
     color: PRIMARY,
@@ -278,7 +296,7 @@ const styles = StyleSheet.create({
     color: '#666666',
     fontSize: 14,
     lineHeight: 22,
-    marginTop: 16,
+    marginTop: 14,
     maxWidth: 340,
   },
 
@@ -287,7 +305,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 20,
+    marginTop: 18,
   },
   pill: {
     flexDirection: 'row',
@@ -308,7 +326,7 @@ const styles = StyleSheet.create({
 
   // CTAs
   ctas: {
-    marginTop: 36,
+    marginTop: 28,
     gap: 12,
   },
   primaryBtn: {
@@ -359,7 +377,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 40,
+    marginTop: 30,
     paddingTop: 24,
     borderTopWidth: 1,
     borderTopColor: '#F0F0F0',

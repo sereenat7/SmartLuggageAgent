@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend API URL - Update this to your actual backend URL
-const API_URL = 'http://192.168.0.127:5000/api/payment';
+const API_URL = 'http://192.168.8.247:5000/api/payment';
 
 /**
  * Create a Razorpay order

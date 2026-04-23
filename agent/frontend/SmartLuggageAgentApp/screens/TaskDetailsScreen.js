@@ -207,7 +207,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <Text style={styles.backButtonText}>←</Text>
+          <Text style={styles.backButtonText}>{'<'} </Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Task Details</Text>
         <View style={styles.spacer} />
@@ -244,7 +244,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
             style={styles.callButton}
             onPress={handleCallCustomer}
           >
-            <Text style={styles.callIcon}>📞</Text>
+            <Text style={styles.callIcon}>Call</Text>
             <Text style={styles.callText}>Call Customer</Text>
           </TouchableOpacity>
         </View>
@@ -255,7 +255,9 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
           <View style={styles.infoRow}>
             <View style={styles.infoItemWithIcon}>
-              <Text style={styles.infoIcon}>⏰</Text>
+              <View style={styles.infoIconWrap}>
+                <Ionicons name="time-outline" size={17} color={Colors.primary} />
+              </View>
               <View>
                 <Text style={styles.infoLabel}>Time Slot</Text>
                 <Text style={styles.infoValue}>{task.timeSlot}</Text>
@@ -265,7 +267,9 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
           <View style={styles.infoRow}>
             <View style={styles.infoItemWithIcon}>
-              <Text style={styles.infoIcon}>🧳</Text>
+              <View style={styles.infoIconWrap}>
+                <Ionicons name="briefcase-outline" size={17} color={Colors.primary} />
+              </View>
               <View>
                 <Text style={styles.infoLabel}>Luggage</Text>
                 <Text style={styles.infoValue}>{task.luggage} bags</Text>
@@ -275,7 +279,9 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
           <View style={styles.infoRow}>
             <View style={styles.infoItemWithIcon}>
-              <Text style={styles.infoIcon}>📍</Text>
+              <View style={styles.infoIconWrap}>
+                <Ionicons name="navigate-circle-outline" size={17} color={Colors.primary} />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.infoLabel}>Pickup Address</Text>
                 <Text style={styles.infoValue}>{task.pickupLocation}</Text>
@@ -285,7 +291,9 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
           <View style={styles.infoRow}>
             <View style={styles.infoItemWithIcon}>
-              <Text style={styles.infoIcon}>📍</Text>
+              <View style={styles.infoIconWrap}>
+                <Ionicons name="location-outline" size={17} color={Colors.primary} />
+              </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.infoLabel}>Drop Address</Text>
                 <Text style={styles.infoValue}>{task.dropLocation}</Text>
@@ -307,7 +315,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
               <Text style={[styles.statusDropdownText, { color: getStatusColor(status) }]}>
                 {status.charAt(0).toUpperCase() + status.slice(1)}
               </Text>
-              <Text style={styles.dropdownIcon}>{showStatusDropdown ? '▲' : '▼'}</Text>
+              <Text style={styles.dropdownIcon}>{showStatusDropdown ? '^' : 'v'}</Text>
             </TouchableOpacity>
 
             {showStatusDropdown && (
@@ -356,8 +364,18 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
         {/* Customer Luggage Reference */}
         <View style={styles.referenceCard}>
-          <Text style={styles.referenceTitle}>Customer Luggage Reference</Text>
-          <Text style={styles.referenceSubtitle}>Photo uploaded by customer for verification</Text>
+          <View style={styles.referenceHeaderRow}>
+            <View style={styles.referenceIconWrap}>
+              <Ionicons name="images-outline" size={18} color={Colors.primary} />
+            </View>
+            <View style={styles.referenceTitleBlock}>
+              <Text style={styles.referenceTitle}>Customer Luggage Reference</Text>
+              <Text style={styles.referenceSubtitle}>Photo uploaded by customer for verification</Text>
+            </View>
+            <View style={styles.referenceStatusChip}>
+              <Text style={styles.referenceStatusText}>{referenceImage ? 'Available' : 'Missing'}</Text>
+            </View>
+          </View>
 
           {referenceImage ? (
             <TouchableOpacity
@@ -373,7 +391,10 @@ export default function TaskDetailsScreen({ navigation, route }) {
             </View>
           )}
 
-          <Text style={styles.referenceHint}>Match this before pickup</Text>
+          <View style={styles.referenceHintBox}>
+            <Ionicons name="checkmark-circle-outline" size={15} color="#0F8A4B" />
+            <Text style={styles.referenceHint}>Match this before pickup</Text>
+          </View>
 
           {referenceImage && luggagePhotos.length > 0 && (
             <View style={styles.compareRow}>
@@ -451,14 +472,14 @@ export default function TaskDetailsScreen({ navigation, route }) {
         {/* Status Indicators */}
         {task.status === 'in-progress' && task.weight && (
           <View style={styles.successCard}>
-            <Text style={styles.successIcon}>✓</Text>
+            <Text style={styles.successIcon}>OK</Text>
             <Text style={styles.successText}>Weight updated: {task.weight} kg</Text>
           </View>
         )}
 
         {task.status === 'completed' && (
           <View style={styles.successCard}>
-            <Text style={styles.successIcon}>✓</Text>
+            <Text style={styles.successIcon}>OK</Text>
             <Text style={styles.successText}>OTP Verified</Text>
           </View>
         )}
@@ -556,20 +577,22 @@ export default function TaskDetailsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FF5252',
+    backgroundColor: '#F8FAFC',
   },
   container: {
     flex: 1,
     backgroundColor: Colors.background,
   },
   header: {
-    backgroundColor: '#FF5252',
+    backgroundColor: '#ff6600',
     paddingTop: 14,
-    paddingBottom: 16,
+    paddingBottom: 18,
     paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderBottomLeftRadius: 28,
+    borderBottomRightRadius: 28,
   },
   backButton: {
     padding: 8,
@@ -590,7 +613,8 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flex: 1,
-    padding: 12,
+    paddingHorizontal: 14,
+    paddingTop: 14,
   },
   keyboardContainer: {
     flex: 1,
@@ -599,13 +623,13 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: 12,
+    borderRadius: 22,
     padding: 16,
-    marginBottom: 12,
+    marginBottom: 14,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 3,
+    shadowRadius: 4,
     elevation: 2,
   },
   customerHeader: {
@@ -653,10 +677,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 16,
     backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   callIcon: {
     fontSize: 16,
@@ -668,31 +694,42 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   cardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: Colors.textPrimary,
     marginBottom: 12,
   },
   infoRow: {
-    marginBottom: 14,
+    marginBottom: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   infoItemWithIcon: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
-  infoIcon: {
-    fontSize: 20,
+  infoIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 12,
-    marginTop: 2,
   },
   infoLabel: {
     fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 4,
+    color: '#64748B',
+    marginBottom: 3,
+    fontWeight: '600',
   },
   infoValue: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '700',
     color: Colors.textPrimary,
   },
   statusSelector: {
@@ -768,35 +805,63 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   referenceCard: {
-    backgroundColor: '#FFF6F2',
+    backgroundColor: Colors.background,
     borderWidth: 1,
-    borderColor: '#FFD5C7',
-    borderRadius: 14,
+    borderColor: Colors.border,
+    borderRadius: 22,
     padding: 16,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  referenceHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 12,
-    shadowColor: '#CC5B2E',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
+  },
+  referenceIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  referenceTitleBlock: {
+    flex: 1,
   },
   referenceTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#B63812',
+    fontWeight: '800',
+    color: Colors.textPrimary,
   },
   referenceSubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
     marginTop: 4,
-    marginBottom: 12,
+  },
+  referenceStatusChip: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginLeft: 8,
+  },
+  referenceStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
   },
   referenceImageCard: {
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#F0B79F',
-    backgroundColor: '#FFF0E8',
+    borderColor: Colors.border,
+    backgroundColor: Colors.backgroundSecondary,
   },
   referenceImage: {
     width: '100%',
@@ -804,10 +869,10 @@ const styles = StyleSheet.create({
   },
   referencePlaceholder: {
     borderWidth: 1,
-    borderColor: '#F2C8B8',
+    borderColor: Colors.border,
     borderRadius: 12,
     borderStyle: 'dashed',
-    backgroundColor: '#FFF9F6',
+    backgroundColor: Colors.backgroundSecondary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 34,
@@ -819,10 +884,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   referenceHint: {
-    marginTop: 10,
     fontSize: 12,
     fontWeight: '600',
-    color: '#CC4E26',
+    color: '#475569',
+    marginLeft: 6,
+  },
+  referenceHintBox: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   compareRow: {
     flexDirection: 'row',
@@ -832,7 +908,7 @@ const styles = StyleSheet.create({
   comparePane: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#F0B79F',
+    borderColor: Colors.border,
     borderRadius: 10,
     backgroundColor: Colors.background,
     padding: 8,
@@ -995,22 +1071,22 @@ const styles = StyleSheet.create({
     maxHeight: 560,
   },
   otpCard: {
-    backgroundColor: '#FFF5F0',
+    backgroundColor: Colors.background,
     borderWidth: 1,
-    borderColor: '#FFCAB4',
-    borderRadius: 14,
+    borderColor: Colors.border,
+    borderRadius: 22,
     padding: 16,
     marginBottom: 24,
-    shadowColor: '#D85E31',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   otpTitle: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#B53A12',
+    fontWeight: '800',
+    color: Colors.textPrimary,
   },
   otpSubtitle: {
     fontSize: 12,

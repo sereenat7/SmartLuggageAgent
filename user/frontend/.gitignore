@@ -46,5 +46,10 @@ echo ".env" >> .gitignore
 
 # environment files
 .env
+node_modules/
+.expo/
 .env.*
 user/frontend/backend/.env
+node_modules/
+.env
+.expo/

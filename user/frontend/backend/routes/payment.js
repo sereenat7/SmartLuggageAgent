@@ -3,6 +3,7 @@ const router = express.Router();
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const db = require("../db");
+const { queueBookingForAgentDashboard } = require("./bookings");
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({
@@ -206,7 +207,7 @@ router.post("/verify-payment", verifyToken, async (req, res) => {
         bookingData.dropLongitude,
         bookingData.photos ? JSON.stringify(bookingData.photos) : null,
         bookingData.additionalInfo,
-        'confirmed',
+        'pending',
         'completed',
         razorpayOrderId,
         razorpayPaymentId,
@@ -214,7 +215,7 @@ router.post("/verify-payment", verifyToken, async (req, res) => {
         paymentMethod
       ];
 
-      db.query(query, values, (err, result) => {
+      db.query(query, values, async (err, result) => {
         if (err) {
           console.error("Booking Error:", err);
           return res.json({ 
@@ -224,12 +225,21 @@ router.post("/verify-payment", verifyToken, async (req, res) => {
           });
         }
 
-        console.log('Booking created successfully - ID:', result.insertId);
+        const bookingId = result.insertId;
+        console.log('Booking created successfully - ID:', bookingId);
+
+        // Queue booking for agent dashboard
+        try {
+          const queueResult = await queueBookingForAgentDashboard(bookingId, req.phone);
+          console.log('DEBUG: Booking queued for agents:', queueResult);
+        } catch (queueErr) {
+          console.error('DEBUG: Queue failed, but booking was created:', queueErr.message);
+        }
 
         res.json({
           success: true,
           message: "Payment verified and booking confirmed",
-          bookingId: result.insertId,
+          bookingId: bookingId,
           razorpayPaymentId: razorpayPaymentId,
           razorpayOrderId: razorpayOrderId
         });
