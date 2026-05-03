@@ -94,7 +94,7 @@ PORT=5000
 2. Payment routes are automatically registered in `server.js`
 
 ### Frontend Setup
-1. Backend API URL is set to `http://192.168.1.6:5000` in paymentService.js
+1. Backend API URL is set to `http://10.40.54.52:5000` in paymentService.js
    - Update this to your actual backend URL if different
 
 ## Integration Steps for Real Razorpay Checkout

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Stack } from "expo-router";
-import { initializeNotifications } from "./utils/notificationService";
+import { initializeNotifications } from "../utils/notificationService";
 
 export default function RootLayout() {
   useEffect(() => {

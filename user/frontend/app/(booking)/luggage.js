@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { createDropLocation } from '../utils/airportMappings';
+import { createDropLocation } from '../../utils/airportMappings';
 
 export default function LuggageDetails() {
   const router = useRouter();

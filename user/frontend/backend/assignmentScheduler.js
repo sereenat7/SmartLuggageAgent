@@ -275,15 +275,39 @@ const processDueBookings = async () => {
      WHERE status = 'pending'
        AND assignment_due_at IS NOT NULL
        AND assignment_due_at <= CURRENT_TIMESTAMP
+       AND CONCAT(departure_date, ' ', 
+         IF(LENGTH(pickup_time) = 5, CONCAT(pickup_time, ':00'), pickup_time)
+       ) > NOW()
      ORDER BY assignment_due_at ASC
      LIMIT 25`
   );
+
+  console.log(`📋 [Scheduler] Found ${dueBookings.length} due bookings to assign (future pickups only - 5 min before)`);
+
+  // Check available agents
+  const availableAgents = await runQuery(
+    `SELECT agent_id, name, phone, latitude, longitude, status 
+     FROM support_agents 
+     WHERE status = 'available' 
+       AND latitude IS NOT NULL 
+       AND longitude IS NOT NULL`
+  );
+  console.log(`👥 [Scheduler] Available agents: ${availableAgents.length}`);
+  if (availableAgents.length > 0) {
+    availableAgents.forEach(a => {
+      console.log(`   - Agent ${a.agent_id}: ${a.name} (${a.phone}) at ${a.latitude}, ${a.longitude}`);
+    });
+  }
 
   for (const booking of dueBookings) {
     try {
       const bestAgent = await getBestAgentForBooking(booking);
       await queueBookingForAgentDashboard(booking, bestAgent);
-      console.log(`✅ Booking ${booking.id} queued for agent dashboard`);
+      if (bestAgent) {
+        console.log(`✅ Booking ${booking.id} assigned to Agent ${bestAgent.agentId} (${bestAgent.name})`);
+      } else {
+        console.log(`⚠️ Booking ${booking.id} queued but NO agent found nearby`);
+      }
     } catch (error) {
       console.error(`❌ Failed to queue booking ${booking.id}:`, error.message);
     }

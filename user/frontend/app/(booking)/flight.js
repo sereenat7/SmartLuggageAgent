@@ -14,7 +14,7 @@ import {
   loadIndianAirports, 
   loadGlobalAirlines 
 } from '../airportUtils';
-import { normalizeAirportName } from '../utils/airportMappings'; 
+import { normalizeAirportName } from '../../utils/airportMappings'; 
 
 const { width } = Dimensions.get('window');
 const SERVICEABLE_PINS = ['401303', '400001', '401202', '401208', '110001'];

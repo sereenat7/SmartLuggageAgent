@@ -82,7 +82,38 @@ const normalizePickupDateTime = (departureDate, pickupTime) => {
     return null;
   }
 
-  return `${dateText} ${timeText.length === 5 ? `${timeText}:00` : timeText}`;
+  // Format: "YYYY-MM-DD HH:MM:SS" for MySQL DATETIME
+  // departureDate should be in format like "2026-04-23" or "04/23/2026"
+  let date = dateText;
+  
+  // If date is in MM/DD/YYYY format, convert to YYYY-MM-DD
+  if (dateText.includes('/')) {
+    const [month, day, year] = dateText.split('/');
+    date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  
+  // Convert 12-hour format (e.g., "5:30 PM") to 24-hour format
+  let time = timeText;
+  if (timeText.includes('AM') || timeText.includes('PM')) {
+    const isPM = timeText.includes('PM');
+    const cleanTime = timeText.replace(/\s*(AM|PM)/i, '').trim();
+    const [hours, minutes] = cleanTime.split(':');
+    let hour = parseInt(hours, 10);
+    const minute = minutes ? parseInt(minutes, 10) : 0;
+    
+    if (isPM && hour !== 12) {
+      hour += 12;
+    } else if (!isPM && hour === 12) {
+      hour = 0;
+    }
+    
+    time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
+  } else {
+    // Already in 24-hour format or just HH:MM
+    time = timeText.length === 5 ? `${timeText}:00` : timeText;
+  }
+  
+  return `${date} ${time}`;
 };
 
 const getPhoneVariants = (phone) => {
@@ -312,7 +343,25 @@ router.post("/create", verifyToken, (req, res) => {
   } = req.body;
 
   const normalizedBagWeight = bagWeight ? String(bagWeight).trim().slice(0, 50) : null;
-  const assignmentDueAt = normalizePickupDateTime(departureDate, pickupTime);
+  
+  // Only assign bookings with future pickup times
+  // Parse pickup datetime and check if it's in the future
+  const pickupDateTime = normalizePickupDateTime(departureDate, pickupTime);
+  const now = new Date();
+  let assignmentDueAt = null;
+  
+  if (pickupDateTime) {
+    const pickupDate = new Date(pickupDateTime);
+    if (pickupDate > now) {
+      // Booking is for future - assign 5 minutes before pickup time
+      const assignmentTime = new Date(pickupDate.getTime() - (5 * 60 * 1000));
+      // But don't assign more than 48 hours in advance
+      const maxAdvanceTime = new Date(now.getTime() + (48 * 60 * 60 * 1000));
+      const actualAssignmentTime = assignmentTime < maxAdvanceTime ? assignmentTime : maxAdvanceTime;
+      assignmentDueAt = actualAssignmentTime.toISOString().slice(0, 19).replace('T', ' ');
+    }
+    // If pickup time is in the past, assignmentDueAt stays NULL and booking won't be assigned
+  }
 
   console.log('DEBUG: Creating booking for phone:', req.phone);
   try {
@@ -410,7 +459,7 @@ router.post("/create", verifyToken, (req, res) => {
 // MUST come BEFORE /:bookingId so it matches first
 router.get("/inbox", (req, res) => {
   const query = `
-    SELECT aq.queue_id as queueId, aq.status as queueStatus, b.id as bookingId, b.phone, b.username as name, 
+    SELECT aq.id as queueId, aq.status as queueStatus, b.id as bookingId, b.phone, b.username as name, 
            b.pickup_address, b.pickup_latitude, b.pickup_longitude, 
            b.pickup_time, b.bag_count, b.bag_weight, b.status, b.created_at,
            b.departure_city, b.arrival_city, b.departure_date,
@@ -512,7 +561,7 @@ router.get("/inbox", (req, res) => {
 router.get("/debug/all-bookings-with-queue", (req, res) => {
   const query = `
     SELECT b.id, b.status, b.username, b.pickup_time, b.created_at, 
-           aq.queue_id, aq.status as queue_status
+           aq.id as queue_id, aq.status as queue_status
     FROM bookings b
     LEFT JOIN agent_queue aq ON aq.booking_id = b.id
     ORDER BY b.id DESC

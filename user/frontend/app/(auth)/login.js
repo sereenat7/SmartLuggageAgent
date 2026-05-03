@@ -13,7 +13,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { triggerLoginNotification } from "../utils/notificationService";
+import { triggerLoginNotification } from "../../utils/notificationService";
 
 export default function LoginScreen() {
   const params = useLocalSearchParams();
@@ -46,7 +46,7 @@ export default function LoginScreen() {
         : { phone: "+91" + phone, password: password };
 
       const response = await fetch(
-        `http://192.168.8.247:5000/api/auth${endpoint}`,
+        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.88.246.52:5000'}/api/auth${endpoint}`,
         {
           method: "POST",
           headers: {

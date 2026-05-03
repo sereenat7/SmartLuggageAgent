@@ -54,7 +54,7 @@ export default function RazorpayPaymentScreen() {
 
       // Verify payment with backend
       const response = await fetch(
-        'http://192.168.8.247:5000/api/payment/verify-payment',
+        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.88.246.52:5000'}/api/payment/verify-payment`,
         {
           method: 'POST',
           headers: {
@@ -71,32 +71,14 @@ export default function RazorpayPaymentScreen() {
       const data = await response.json();
 
       if (data.success) {
-        Alert.alert(
-          'Payment Successful! 🎉',
-          'Your luggage booking is confirmed!',
-          [
-            {
-              text: 'View Receipt',
-              onPress: () => {
-                router.push({
-                  pathname: '/(booking)/receipt',
-                  params: {
-                    bookingId: data.bookingId,
-                  },
-                });
-              },
-            },
-            {
-              text: 'Go to Bookings',
-              onPress: () => {
-                // Navigate to bookings tab
-                router.push({
-                  pathname: '/(tabs)',
-                });
-              },
-            },
-          ]
-        );
+        // Auto-navigate to receipt without showing alert
+        console.log('Payment verified successfully. Navigating to receipt...');
+        router.replace({
+          pathname: '/(booking)/receipt',
+          params: {
+            bookingId: data.bookingId,
+          },
+        });
       } else {
         Alert.alert('Verification Failed', data.message || 'Could not verify payment');
         router.back();

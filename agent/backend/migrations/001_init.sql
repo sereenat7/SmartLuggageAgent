@@ -1,15 +1,7 @@
 -- Smart Luggage Agent backend schema (MySQL 8+)
+-- Use CREATE TABLE IF NOT EXISTS to preserve existing data
 
--- Drop tables in reverse order of dependencies
-DROP TABLE IF EXISTS booking_luggage_photos;
-DROP TABLE IF EXISTS booking_locations;
-DROP TABLE IF EXISTS bookings;
-DROP TABLE IF EXISTS kyc_components;
-DROP TABLE IF EXISTS kyc_files;
-DROP TABLE IF EXISTS kyc;
-DROP TABLE IF EXISTS agents;
-
-CREATE TABLE agents (
+CREATE TABLE IF NOT EXISTS agents (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   full_name VARCHAR(160) NOT NULL,
   mobile VARCHAR(32) NOT NULL,
@@ -20,7 +12,7 @@ CREATE TABLE agents (
   UNIQUE KEY uq_agents_mobile (mobile)
 );
 
-CREATE TABLE kyc (
+CREATE TABLE IF NOT EXISTS kyc (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,
 
@@ -87,7 +79,7 @@ CREATE TABLE kyc (
   CONSTRAINT fk_kyc_agent FOREIGN KEY (user_id) REFERENCES agents(id) ON DELETE CASCADE
 );
 
-CREATE TABLE kyc_components (
+CREATE TABLE IF NOT EXISTS kyc_components (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,
   kyc_id BIGINT UNSIGNED NOT NULL,
@@ -103,7 +95,7 @@ CREATE TABLE kyc_components (
   CONSTRAINT fk_kyc_components_kyc FOREIGN KEY (kyc_id) REFERENCES kyc(id) ON DELETE CASCADE
 );
 
-CREATE TABLE kyc_files (
+CREATE TABLE IF NOT EXISTS kyc_files (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,
   kyc_id BIGINT UNSIGNED NOT NULL,
@@ -120,7 +112,7 @@ CREATE TABLE kyc_files (
 );
 
 -- Bookings table for storing flight and luggage booking details
-CREATE TABLE bookings (
+CREATE TABLE IF NOT EXISTS bookings (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   user_id BIGINT UNSIGNED NOT NULL,
   
@@ -159,7 +151,7 @@ CREATE TABLE bookings (
 );
 
 -- Booking Locations table to store pickup and drop locations with coordinates
-CREATE TABLE booking_locations (
+CREATE TABLE IF NOT EXISTS booking_locations (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   booking_id BIGINT UNSIGNED NOT NULL,
   
@@ -200,7 +192,7 @@ CREATE TABLE booking_locations (
 );
 
 -- Booking Luggage Photos table
-CREATE TABLE booking_luggage_photos (
+CREATE TABLE IF NOT EXISTS booking_luggage_photos (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   booking_id BIGINT UNSIGNED NOT NULL,
   photo_url VARCHAR(500) NOT NULL,

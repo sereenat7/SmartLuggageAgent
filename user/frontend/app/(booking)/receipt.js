@@ -74,7 +74,7 @@ export default function ReceiptScreen() {
       // Try to fetch booking details
       try {
         const response = await fetch(
-          `http://192.168.8.247:5000/api/bookings/${bookingId}`,
+          `${process.env.EXPO_PUBLIC_API_URL || 'http://10.88.246.52:5000'}/api/bookings/${bookingId}`,
           {
             method: 'GET',
             headers: {

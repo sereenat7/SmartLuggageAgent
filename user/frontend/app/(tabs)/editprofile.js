@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const IP_ADDRESS = "192.168.8.247"; 
+const IP_ADDRESS = "10.40.54.52"; 
 const API_URL = `http://${IP_ADDRESS}:5000/api/auth`;
 
 export default function EditProfile() {

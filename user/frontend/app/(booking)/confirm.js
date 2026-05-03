@@ -8,9 +8,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WebView } from 'react-native-webview';
-import { createBooking } from '../utils/bookingService';
-import { calculatePrice, calculateDistance } from '../utils/pricingCalculator';
-import { createRazorpayOrder, verifyRazorpayPayment } from '../utils/paymentService';
+import { createBooking } from '../../utils/bookingService';
+import { calculatePrice, calculateDistance } from '../../utils/pricingCalculator';
+import { createRazorpayOrder, verifyRazorpayPayment } from '../../utils/paymentService';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 
@@ -279,7 +279,7 @@ export default function BookingSummary() {
 
       // Verify payment with backend
       const response = await fetch(
-        'http://192.168.8.247:5000/api/payment/verify-payment',
+        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.88.246.52:5000'}/api/payment/verify-payment`,
         {
           method: 'POST',
           headers: {

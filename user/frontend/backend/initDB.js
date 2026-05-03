@@ -67,6 +67,51 @@ const initializeDatabase = (callback) => {
       uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )`,
 
+    // 4a. Create Agent Queue Table if not exists
+    `CREATE TABLE IF NOT EXISTS agent_queue (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT,
+      booking_id INT NOT NULL,
+      agent_id INT,
+      preferred_agent_id INT,
+      status VARCHAR(50) DEFAULT 'pending',
+      declined_agent_ids LONGTEXT NULL,
+      requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_booking_queue (booking_id)
+    )`,
+
+    // 4b. Create Agent Sessions Table if not exists
+    `CREATE TABLE IF NOT EXISTS agent_sessions (
+      session_id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      agent_id INT NOT NULL,
+      booking_id INT NULL,
+      start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      end_time TIMESTAMP NULL,
+      status VARCHAR(50) DEFAULT 'active'
+    )`,
+
+    // 4c. Create Support Agents Table if not exists
+    `CREATE TABLE IF NOT EXISTS support_agents (
+      agent_id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(160),
+      phone VARCHAR(32) UNIQUE,
+      status VARCHAR(50) DEFAULT 'available',
+      current_user_id INT,
+      latitude DECIMAL(10, 8),
+      longitude DECIMAL(11, 8),
+      h3_index VARCHAR(64),
+      vehicle_type VARCHAR(80),
+      max_weight_kg INT,
+      supports_fragile TINYINT DEFAULT 0,
+      supports_checkin TINYINT DEFAULT 0,
+      last_assigned_at TIMESTAMP NULL,
+      location_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`,
+
     // 5. Add missing columns to bookings table
     `ALTER TABLE bookings ADD arrival_city VARCHAR(100)`,
     `ALTER TABLE bookings ADD arrival_airport VARCHAR(255)`,
@@ -80,14 +125,32 @@ const initializeDatabase = (callback) => {
     `ALTER TABLE bookings ADD razorpay_payment_id VARCHAR(100)`,
     `ALTER TABLE bookings ADD amount DECIMAL(10, 2)`,
     `ALTER TABLE bookings ADD payment_method VARCHAR(50)`,
+    
+    // 6. Add assignment tracking columns to bookings table
+    `ALTER TABLE bookings ADD assignment_due_at DATETIME`,
+    `ALTER TABLE bookings ADD assignment_status VARCHAR(50) DEFAULT 'pending'`,
+    `ALTER TABLE bookings ADD assigned_agent_id INT`,
+    
+    // Add missing columns to support_agents
+    `ALTER TABLE support_agents ADD last_assigned_at TIMESTAMP NULL`,
+    
+    // 8. Fix existing pending bookings - only set assignment_due_at for FUTURE bookings
+    // Build datetime from departure_date and pickup_time, compare with NOW()
+    // Assign 5 minutes BEFORE pickup time
+    `UPDATE bookings 
+     SET assignment_due_at = DATE_SUB(
+       CONCAT(departure_date, ' ', 
+         IF(LENGTH(pickup_time) = 5, CONCAT(pickup_time, ':00'), pickup_time)
+       ), 
+       INTERVAL 5 MINUTE
+     )
+     WHERE status = 'pending' 
+       AND assignment_due_at IS NULL
+       AND CONCAT(departure_date, ' ', 
+         IF(LENGTH(pickup_time) = 5, CONCAT(pickup_time, ':00'), pickup_time)
+       ) > NOW()`,
 
-    // 6. Keep agent queue schema aligned with agent request handlers
-    `ALTER TABLE agent_queue ADD declined_agent_ids LONGTEXT NULL`,
-    `ALTER TABLE agent_queue ADD requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
-    `ALTER TABLE agent_queue ADD updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`,
-
-    // 7. Tie active sessions to the exact booking that was accepted
-    `ALTER TABLE agent_sessions ADD booking_id INT NULL`
+    // 7. Tie active sessions to the exact booking that was accepted (no need to ALTER if already created above)
   ];
 
   let queryIndex = 0;

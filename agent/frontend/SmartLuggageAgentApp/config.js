@@ -1,4 +1,4 @@
-// Use your Mac's LAN IP so both browser and Expo Go on phone can reach the backend.
-// Found via: ipconfig getifaddr en0
-export const API_URL = 'http://192.168.8.247:4000';
-export const USER_API_URL = 'http://192.168.8.247:5000';
+// Use environment variables from .env file
+// Update .env file to change IP address in ONE place
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.88.246.52:4000';
+export const USER_API_URL = process.env.EXPO_PUBLIC_USER_API_URL || 'http://10.88.246.52:5000';

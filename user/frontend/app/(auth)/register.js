@@ -25,8 +25,8 @@ export default function RegisterScreen() {
     const [errors, setErrors] = useState({});
     const [focus, setFocus] = useState("");
 
-    // IP address for backend connection
-    const BASE_URL = "http://10.166.255.52:5000/api/auth";
+    // Backend connection URL from .env file
+    const BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.88.246.52:5000'}/api/auth`;
 
     const handleRegister = async () => {
         let newErrors = {};

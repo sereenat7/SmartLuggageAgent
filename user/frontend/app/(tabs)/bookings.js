@@ -15,7 +15,7 @@ export default function BookingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const API_URL = "http://192.168.8.247:5000/api/bookings";
+  const API_URL = "http://10.40.54.52:5000/api/bookings";
 
   const fetchBookings = useCallback(async () => {
     setIsLoading(true);

@@ -8,6 +8,7 @@ const bookingRoutes = require("./routes/bookings");
 const paymentRoutes = require("./routes/payment");
 const agentRoutes = require("./routes/agents");
 const initializeDatabase = require("./initDB");
+const { startBookingAssignmentScheduler } = require("./assignmentScheduler");
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -223,4 +224,8 @@ initializeDatabase(() => {
     console.log(`Server running on http://${host}:${port}`);
     console.log("✅ Server ready to accept requests");
   });
+  
+  // Start the booking assignment scheduler
+  startBookingAssignmentScheduler();
+  console.log("✅ Booking assignment scheduler started (runs every 60 seconds)");
 });

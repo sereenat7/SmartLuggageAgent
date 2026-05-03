@@ -1,14 +1,10 @@
 {
-  "compilerOptions": {
-    "allowJs": true,
-    "checkJs": false,
-    "noEmit": true,
-    "rootDir": "."
-  },
+  "compilerOptions": {},
+  "extends": "expo/tsconfig.base",
   "include": [
-    "**/*",
+    "**/*.ts",
+    "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
-  ],
-  "extends": "expo/tsconfig.base"
+  ]
 }
