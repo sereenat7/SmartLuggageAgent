@@ -11,8 +11,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 1. Double check your IPv4 address using 'ipconfig'
 // 2. Ensure port is 5000 (from your server.js)
-const IP_ADDRESS = "10.40.54.52"; 
-const API_URL = "http://10.40.54.52:5000/api/auth/user-profile";
+const IP_ADDRESS = "192.168.0.127"; 
+const API_URL = "http://192.168.0.127:5000/api/auth/user-profile";
 
 const ProfileOption = ({ icon, title, color, onPress }) => (
   <TouchableOpacity style={styles.optionRow} onPress={onPress}>
@@ -141,13 +141,13 @@ export default function Profile() {
 
           <Text style={styles.sectionLabel}>SUPPORT</Text>
           <View style={styles.cardGroup}>
-            <ProfileOption icon="file-document" title="Terms and Conditions" color="#8B5CF6" onPress={() => {}} />
+            <ProfileOption icon="file-document" title="Terms and Conditions" color="#8B5CF6" onPress={() => router.push('/terms')} />
             <View style={styles.divider} />
-            <ProfileOption icon="help-circle" title="Help and Support" color="#F59E0B" onPress={() => {}} />
+            <ProfileOption icon="help-circle" title="Help and Support" color="#F59E0B" onPress={() => router.push('/support')} />
             <View style={styles.divider} />
             <ProfileOption icon="alert-circle" title="Report a Problem" color="#EF4444" onPress={() => router.push('/report')} />
             <View style={styles.divider} />
-            <ProfileOption icon="message-draw" title="Send Feedback" color="#6366F1" onPress={() => {}} />
+            <ProfileOption icon="message-draw" title="Send Feedback" color="#6366F1" onPress={() => router.push('/feedback')} />
           </View>
 
           <TouchableOpacity style={styles.logoutButton} onPress={() => router.replace('/')}>
