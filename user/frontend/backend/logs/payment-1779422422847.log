@@ -1,0 +1,840 @@
+2026-05-22T04:01:01.314Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T04:01:01.314Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"765","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T04:01:01.315Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "9:30 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "9:30 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Bahinabai garde, , Kalyan",
+    "pickupLatitude": 19.2052848,
+    "pickupLongitude": 73.086969,
+    "pickupTime": "9:35 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:01:30.610Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T04:01:30.611Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"920","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T04:01:30.611Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsGpWrDlrx7jsm",
+  "razorpayPaymentId": "pay_SsGpb4CEZUo1qh",
+  "razorpaySignature": "4699e93354bc24869f3013b081a01084edc8de96ba4ea74f6b4a195572035642",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "9:30 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "9:30 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Bahinabai garde, , Kalyan",
+    "pickupLatitude": 19.2052848,
+    "pickupLongitude": 73.086969,
+    "pickupTime": "9:35 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:01:30.614Z - DEBUG: Received verify-payment request
+2026-05-22T04:01:30.615Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsGpWrDlrx7jsm",
+  "razorpayPaymentId": "pay_SsGpb4CEZUo1qh",
+  "razorpaySignature": "4699e93354bc24869f3013b081a01084edc8de96ba4ea74f6b4a195572035642",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "9:30 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "9:30 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Bahinabai garde, , Kalyan",
+    "pickupLatitude": 19.2052848,
+    "pickupLongitude": 73.086969,
+    "pickupTime": "9:35 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:01:30.615Z - DEBUG: Extracted fields:
+2026-05-22T04:01:30.616Z -   razorpayOrderId: order_SsGpWrDlrx7jsm
+2026-05-22T04:01:30.617Z -   razorpayPaymentId: pay_SsGpb4CEZUo1qh
+2026-05-22T04:01:30.617Z -   razorpaySignature: 4699e93354bc24869f3013b081a01084edc8de96ba4ea74f6b4a195572035642
+2026-05-22T04:01:30.618Z -   bookingData: present
+2026-05-22T04:01:30.853Z - ✅ Booking created successfully - ID: 43
+2026-05-22T04:30:02.946Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T04:30:02.947Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"782","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T04:30:02.948Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India Express",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "9:59 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "9:59 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Aatmasrushti Apartment, , Kalyan",
+    "pickupLatitude": 19.2524055,
+    "pickupLongitude": 73.1397317,
+    "pickupTime": "10:05 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:30:34.727Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T04:30:34.728Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"937","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T04:30:34.728Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsHKBwJpxEOC6e",
+  "razorpayPaymentId": "pay_SsHKIHbKDThPtW",
+  "razorpaySignature": "fe000d1b364cb1fdf0dfe7874a00466953e33b5f49174ea73f4a56864300511d",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India Express",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "9:59 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "9:59 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Aatmasrushti Apartment, , Kalyan",
+    "pickupLatitude": 19.2524055,
+    "pickupLongitude": 73.1397317,
+    "pickupTime": "10:05 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:30:34.730Z - DEBUG: Received verify-payment request
+2026-05-22T04:30:34.730Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsHKBwJpxEOC6e",
+  "razorpayPaymentId": "pay_SsHKIHbKDThPtW",
+  "razorpaySignature": "fe000d1b364cb1fdf0dfe7874a00466953e33b5f49174ea73f4a56864300511d",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India Express",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "9:59 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "9:59 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Aatmasrushti Apartment, , Kalyan",
+    "pickupLatitude": 19.2524055,
+    "pickupLongitude": 73.1397317,
+    "pickupTime": "10:05 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:30:34.731Z - DEBUG: Extracted fields:
+2026-05-22T04:30:34.731Z -   razorpayOrderId: order_SsHKBwJpxEOC6e
+2026-05-22T04:30:34.732Z -   razorpayPaymentId: pay_SsHKIHbKDThPtW
+2026-05-22T04:30:34.733Z -   razorpaySignature: fe000d1b364cb1fdf0dfe7874a00466953e33b5f49174ea73f4a56864300511d
+2026-05-22T04:30:34.733Z -   bookingData: present
+2026-05-22T04:30:35.117Z - ✅ Booking created successfully - ID: 44
+2026-05-22T04:37:51.073Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T04:37:51.074Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"762","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T04:37:51.075Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "10:07 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "10:07 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "634P+6JR, , Kalyan",
+    "pickupLatitude": 19.2048461,
+    "pickupLongitude": 73.0863169,
+    "pickupTime": "10:10 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:38:17.458Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T04:38:17.458Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"917","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T04:38:17.459Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsHSQpmfjWJtVS",
+  "razorpayPaymentId": "pay_SsHSUfgh7O5b34",
+  "razorpaySignature": "b465acf948fa6bbfd1992df7a52f6026647e049e9ded682a594fa4013e6ad2ca",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "10:07 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "10:07 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "634P+6JR, , Kalyan",
+    "pickupLatitude": 19.2048461,
+    "pickupLongitude": 73.0863169,
+    "pickupTime": "10:10 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:38:17.460Z - DEBUG: Received verify-payment request
+2026-05-22T04:38:17.461Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsHSQpmfjWJtVS",
+  "razorpayPaymentId": "pay_SsHSUfgh7O5b34",
+  "razorpaySignature": "b465acf948fa6bbfd1992df7a52f6026647e049e9ded682a594fa4013e6ad2ca",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "10:07 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "10:07 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "634P+6JR, , Kalyan",
+    "pickupLatitude": 19.2048461,
+    "pickupLongitude": 73.0863169,
+    "pickupTime": "10:10 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:38:17.462Z - DEBUG: Extracted fields:
+2026-05-22T04:38:17.463Z -   razorpayOrderId: order_SsHSQpmfjWJtVS
+2026-05-22T04:38:17.464Z -   razorpayPaymentId: pay_SsHSUfgh7O5b34
+2026-05-22T04:38:17.464Z -   razorpaySignature: b465acf948fa6bbfd1992df7a52f6026647e049e9ded682a594fa4013e6ad2ca
+2026-05-22T04:38:17.465Z -   bookingData: present
+2026-05-22T04:38:17.747Z - ✅ Booking created successfully - ID: 45
+2026-05-22T04:46:47.817Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T04:46:47.818Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"763","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T04:46:47.819Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "10:16 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "10:16 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "634P+6JR, , Kalyan",
+    "pickupLatitude": 19.2048461,
+    "pickupLongitude": 73.0863169,
+    "pickupTime": "10:20 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:47:17.436Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T04:47:17.437Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"918","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T04:47:17.437Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsHbt1cggJJ4xD",
+  "razorpayPaymentId": "pay_SsHbx6EFduy5U5",
+  "razorpaySignature": "16835e6897d7f2540f90c18fd9737d99153cc3e2c7022c333ee9bc590a957ce3",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "10:16 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "10:16 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "634P+6JR, , Kalyan",
+    "pickupLatitude": 19.2048461,
+    "pickupLongitude": 73.0863169,
+    "pickupTime": "10:20 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:47:17.439Z - DEBUG: Received verify-payment request
+2026-05-22T04:47:17.439Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsHbt1cggJJ4xD",
+  "razorpayPaymentId": "pay_SsHbx6EFduy5U5",
+  "razorpaySignature": "16835e6897d7f2540f90c18fd9737d99153cc3e2c7022c333ee9bc590a957ce3",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "10:16 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "10:16 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "634P+6JR, , Kalyan",
+    "pickupLatitude": 19.2048461,
+    "pickupLongitude": 73.0863169,
+    "pickupTime": "10:20 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T04:47:17.441Z - DEBUG: Extracted fields:
+2026-05-22T04:47:17.442Z -   razorpayOrderId: order_SsHbt1cggJJ4xD
+2026-05-22T04:47:17.442Z -   razorpayPaymentId: pay_SsHbx6EFduy5U5
+2026-05-22T04:47:17.443Z -   razorpaySignature: 16835e6897d7f2540f90c18fd9737d99153cc3e2c7022c333ee9bc590a957ce3
+2026-05-22T04:47:17.444Z -   bookingData: present
+2026-05-22T04:47:17.671Z - ✅ Booking created successfully - ID: 46
+2026-05-22T07:29:43.924Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T07:29:43.925Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"775","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T07:29:43.926Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "12:59 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "12:59 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Aatmasrushti Apartment, , Kalyan",
+    "pickupLatitude": 19.2524055,
+    "pickupLongitude": 73.1397317,
+    "pickupTime": "1:05 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T07:30:15.550Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T07:30:15.555Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"930","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T07:30:15.557Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsKNzlPrTfojoX",
+  "razorpayPaymentId": "pay_SsKO7K1liNTG3i",
+  "razorpaySignature": "cc425714501eb7f9f01b6e8ead872eeda427fc680457e84ed2a68c5b5c5062df",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "12:59 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "12:59 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Aatmasrushti Apartment, , Kalyan",
+    "pickupLatitude": 19.2524055,
+    "pickupLongitude": 73.1397317,
+    "pickupTime": "1:05 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T07:30:15.567Z - DEBUG: Received verify-payment request
+2026-05-22T07:30:15.568Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsKNzlPrTfojoX",
+  "razorpayPaymentId": "pay_SsKO7K1liNTG3i",
+  "razorpaySignature": "cc425714501eb7f9f01b6e8ead872eeda427fc680457e84ed2a68c5b5c5062df",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "11",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "12:59 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "12:59 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Aatmasrushti Apartment, , Kalyan",
+    "pickupLatitude": 19.2524055,
+    "pickupLongitude": 73.1397317,
+    "pickupTime": "1:05 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T07:30:15.570Z - DEBUG: Extracted fields:
+2026-05-22T07:30:15.572Z -   razorpayOrderId: order_SsKNzlPrTfojoX
+2026-05-22T07:30:15.574Z -   razorpayPaymentId: pay_SsKO7K1liNTG3i
+2026-05-22T07:30:15.576Z -   razorpaySignature: cc425714501eb7f9f01b6e8ead872eeda427fc680457e84ed2a68c5b5c5062df
+2026-05-22T07:30:15.577Z -   bookingData: present
+2026-05-22T07:30:15.872Z - ✅ Booking created successfully - ID: 47
+2026-05-22T07:51:07.858Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T07:51:07.860Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"775","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T07:51:07.860Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "1:20 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "1:20 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Aatmasrushti Apartment, , Kalyan",
+    "pickupLatitude": 19.2524055,
+    "pickupLongitude": 73.1397317,
+    "pickupTime": "1:25 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T07:51:38.930Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T07:51:38.933Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"930","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T07:51:38.934Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsKkbCqSREXoK1",
+  "razorpayPaymentId": "pay_SsKkfaibVRaLyO",
+  "razorpaySignature": "f73aedcac8456e8a57f6181108298b111a26193670a01270798044f0292538e8",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "1:20 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "1:20 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Aatmasrushti Apartment, , Kalyan",
+    "pickupLatitude": 19.2524055,
+    "pickupLongitude": 73.1397317,
+    "pickupTime": "1:25 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T07:51:38.937Z - DEBUG: Received verify-payment request
+2026-05-22T07:51:38.939Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsKkbCqSREXoK1",
+  "razorpayPaymentId": "pay_SsKkfaibVRaLyO",
+  "razorpaySignature": "f73aedcac8456e8a57f6181108298b111a26193670a01270798044f0292538e8",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "1:20 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "1:20 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "Aatmasrushti Apartment, , Kalyan",
+    "pickupLatitude": 19.2524055,
+    "pickupLongitude": 73.1397317,
+    "pickupTime": "1:25 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T07:51:38.942Z - DEBUG: Extracted fields:
+2026-05-22T07:51:38.943Z -   razorpayOrderId: order_SsKkbCqSREXoK1
+2026-05-22T07:51:38.944Z -   razorpayPaymentId: pay_SsKkfaibVRaLyO
+2026-05-22T07:51:38.945Z -   razorpaySignature: f73aedcac8456e8a57f6181108298b111a26193670a01270798044f0292538e8
+2026-05-22T07:51:38.946Z -   bookingData: present
+2026-05-22T07:51:39.294Z - ✅ Booking created successfully - ID: 48
+2026-05-22T07:55:25.366Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T07:55:25.367Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"784","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T07:55:25.368Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "1:23 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "1:23 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421202",
+    "pickupAddress": ", Mankoli, Maharashtra, India, 421202",
+    "pickupLatitude": 19.223336225,
+    "pickupLongitude": 73.079243875,
+    "pickupTime": "1:30 PM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T07:55:54.119Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T07:55:54.121Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"939","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T07:55:54.123Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsKp87rHOcoJOw",
+  "razorpayPaymentId": "pay_SsKpCvQk2soSHN",
+  "razorpaySignature": "208b6158a595cfe3a5ba06d6fdd0987a93833793e781c897798cf2cde8746026",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "1:23 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "1:23 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421202",
+    "pickupAddress": ", Mankoli, Maharashtra, India, 421202",
+    "pickupLatitude": 19.223336225,
+    "pickupLongitude": 73.079243875,
+    "pickupTime": "1:30 PM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T07:55:54.129Z - DEBUG: Received verify-payment request
+2026-05-22T07:55:54.129Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsKp87rHOcoJOw",
+  "razorpayPaymentId": "pay_SsKpCvQk2soSHN",
+  "razorpaySignature": "208b6158a595cfe3a5ba06d6fdd0987a93833793e781c897798cf2cde8746026",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "1:23 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "1:23 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421202",
+    "pickupAddress": ", Mankoli, Maharashtra, India, 421202",
+    "pickupLatitude": 19.223336225,
+    "pickupLongitude": 73.079243875,
+    "pickupTime": "1:30 PM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T07:55:54.130Z - DEBUG: Extracted fields:
+2026-05-22T07:55:54.131Z -   razorpayOrderId: order_SsKp87rHOcoJOw
+2026-05-22T07:55:54.134Z -   razorpayPaymentId: pay_SsKpCvQk2soSHN
+2026-05-22T07:55:54.135Z -   razorpaySignature: 208b6158a595cfe3a5ba06d6fdd0987a93833793e781c897798cf2cde8746026
+2026-05-22T07:55:54.137Z -   bookingData: present
+2026-05-22T07:55:54.405Z - ✅ Booking created successfully - ID: 49

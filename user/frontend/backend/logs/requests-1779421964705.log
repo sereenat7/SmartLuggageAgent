@@ -1,0 +1,315 @@
+2026-05-22T03:52:45.610Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:52:45.611Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"903-06gsoAm5crQVrTMGUd9RhsmG/MA\""}
+2026-05-22T03:52:45.611Z - BODY: undefined
+2026-05-22T03:52:49.580Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:52:49.581Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"720-nK+FymjiFIhR5ui74bRj6jK+2B0\""}
+2026-05-22T03:52:49.581Z - BODY: undefined
+2026-05-22T03:52:53.601Z - REQUEST: GET /api/bookings
+2026-05-22T03:52:53.601Z - HEADERS: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8387-IPNrOHFQrreMe25hM09lerfzOcA\""}
+2026-05-22T03:52:53.602Z - BODY: undefined
+2026-05-22T03:52:53.607Z - REQUEST: GET /api/bookings
+2026-05-22T03:52:53.607Z - HEADERS: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8387-IPNrOHFQrreMe25hM09lerfzOcA\""}
+2026-05-22T03:52:53.608Z - BODY: undefined
+2026-05-22T03:52:57.502Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:52:57.503Z - HEADERS: {"content-type":"application/json","content-length":"118","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:52:57.504Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056262,"longitude":73.08651,"vehicleType":"Car"}
+2026-05-22T03:53:10.239Z - REQUEST: POST /api/geocode
+2026-05-22T03:53:10.239Z - HEADERS: {"content-type":"application/json","content-length":"45","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:53:10.239Z - BODY: {"address":"Indira Gandhi Intl - Terminal 2"}
+2026-05-22T03:53:28.932Z - REQUEST: POST /api/payment/create-order
+2026-05-22T03:53:28.933Z - HEADERS: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"759","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:53:28.934Z - BODY: {"amount":1,"bookingDetails":{"username":"Aditi","isInternational":false,"isDomestic":true,"airlineName":"Air India","flightNumber":"10","terminal":"T2","departureCity":"Delhi","departureAirport":"Indira Gandhi Intl","departureDate":"22/05/2026","departureTime":"9:22 am","arrivalCity":"Delhi","arrivalAirport":"Indira Gandhi Intl","arrivalDate":"22/05/2026","arrivalTime":"9:22 am","bagCount":1,"bagWeight":"10-20 kg","isFragile":false,"isCheckin":false,"pincode":"421201","pickupAddress":"634P+6JR, , Kalyan","pickupLatitude":19.2048461,"pickupLongitude":73.0863169,"pickupTime":"9:30 AM","dropAddress":"Indira Gandhi Intl - Terminal 2","dropLatitude":28.5536096,"dropLongitude":77.0887584,"photos":[],"additionalInfo":"","amount":1,"paymentMethod":"card"}}
+2026-05-22T03:53:55.927Z - REQUEST: POST /api/payment/verify-payment
+2026-05-22T03:53:55.928Z - HEADERS: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"914","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:53:55.928Z - BODY: {"razorpayOrderId":"order_SsGhZL8jrerVEF","razorpayPaymentId":"pay_SsGhdLl09l8x4s","razorpaySignature":"41f1c39a1c14391a64be39d89dc39671eb9dc3d46449d245f97718e5eae02ae8","bookingData":{"username":"Aditi","isInternational":false,"isDomestic":true,"airlineName":"Air India","flightNumber":"10","terminal":"T2","departureCity":"Delhi","departureAirport":"Indira Gandhi Intl","departureDate":"22/05/2026","departureTime":"9:22 am","arrivalCity":"Delhi","arrivalAirport":"Indira Gandhi Intl","arrivalDate":"22/05/2026","arrivalTime":"9:22 am","bagCount":1,"bagWeight":"10-20 kg","isFragile":false,"isCheckin":false,"pincode":"421201","pickupAddress":"634P+6JR, , Kalyan","pickupLatitude":19.2048461,"pickupLongitude":73.0863169,"pickupTime":"9:30 AM","dropAddress":"Indira Gandhi Intl - Terminal 2","dropLatitude":28.5536096,"dropLongitude":77.0887584,"photos":[],"additionalInfo":"","amount":1,"paymentMethod":"card"}}
+2026-05-22T03:54:05.977Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:05.978Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"720-nK+FymjiFIhR5ui74bRj6jK+2B0\""}
+2026-05-22T03:54:05.978Z - BODY: undefined
+2026-05-22T03:54:08.363Z - REQUEST: POST /api/agents/respond-request
+2026-05-22T03:54:08.363Z - HEADERS: {"content-type":"application/json","content-length":"95","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:54:08.364Z - BODY: {"queueId":1,"action":"accept","agentId":5,"agentName":"Aditi Pawar","agentPhone":"9321073982"}
+2026-05-22T03:54:10.962Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:10.962Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:10.963Z - BODY: undefined
+2026-05-22T03:54:14.261Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:54:14.261Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:54:14.262Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:54:15.985Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:15.985Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:15.986Z - BODY: undefined
+2026-05-22T03:54:21.027Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:21.028Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:21.029Z - BODY: undefined
+2026-05-22T03:54:25.995Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:25.995Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:25.996Z - BODY: undefined
+2026-05-22T03:54:31.008Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:31.009Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:31.010Z - BODY: undefined
+2026-05-22T03:54:36.013Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:36.014Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:36.014Z - BODY: undefined
+2026-05-22T03:54:41.097Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:41.097Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:41.098Z - BODY: undefined
+2026-05-22T03:54:44.260Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:54:44.261Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:54:44.262Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:54:44.277Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:54:44.278Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:54:44.279Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:54:46.069Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:46.070Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:46.074Z - BODY: undefined
+2026-05-22T03:54:51.063Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:51.064Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:51.065Z - BODY: undefined
+2026-05-22T03:54:56.087Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:54:56.088Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:54:56.088Z - BODY: undefined
+2026-05-22T03:55:01.084Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:01.085Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:01.086Z - BODY: undefined
+2026-05-22T03:55:06.099Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:06.100Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:06.100Z - BODY: undefined
+2026-05-22T03:55:11.116Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:11.117Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:11.118Z - BODY: undefined
+2026-05-22T03:55:14.368Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:55:14.369Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:55:14.369Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:55:14.379Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:55:14.380Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:55:14.380Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:55:16.140Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:16.140Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:16.141Z - BODY: undefined
+2026-05-22T03:55:21.131Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:21.132Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:21.132Z - BODY: undefined
+2026-05-22T03:55:26.145Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:26.146Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:26.146Z - BODY: undefined
+2026-05-22T03:55:31.149Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:31.150Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:31.150Z - BODY: undefined
+2026-05-22T03:55:36.149Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:36.150Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:36.151Z - BODY: undefined
+2026-05-22T03:55:41.176Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:41.177Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:41.177Z - BODY: undefined
+2026-05-22T03:55:44.281Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:55:44.281Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:55:44.282Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:55:44.302Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:55:44.303Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:55:44.303Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:55:46.184Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:46.185Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:46.185Z - BODY: undefined
+2026-05-22T03:55:51.205Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:51.205Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:51.206Z - BODY: undefined
+2026-05-22T03:55:56.205Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:55:56.206Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:55:56.206Z - BODY: undefined
+2026-05-22T03:56:01.222Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:01.223Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:01.223Z - BODY: undefined
+2026-05-22T03:56:06.215Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:06.216Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:06.216Z - BODY: undefined
+2026-05-22T03:56:11.237Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:11.238Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:11.238Z - BODY: undefined
+2026-05-22T03:56:14.296Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:56:14.297Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:56:14.298Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:56:14.313Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:56:14.313Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:56:14.314Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:56:16.233Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:16.233Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:16.234Z - BODY: undefined
+2026-05-22T03:56:21.239Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:21.240Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:21.240Z - BODY: undefined
+2026-05-22T03:56:26.250Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:26.250Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:26.251Z - BODY: undefined
+2026-05-22T03:56:31.269Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:31.270Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:31.271Z - BODY: undefined
+2026-05-22T03:56:36.306Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:36.307Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:36.308Z - BODY: undefined
+2026-05-22T03:56:41.290Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:41.290Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:41.291Z - BODY: undefined
+2026-05-22T03:56:44.336Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:56:44.337Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:56:44.337Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:56:44.341Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:56:44.342Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:56:44.342Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:56:46.306Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:46.307Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:46.307Z - BODY: undefined
+2026-05-22T03:56:51.376Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:51.377Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:51.378Z - BODY: undefined
+2026-05-22T03:56:56.359Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:56:56.360Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:56:56.360Z - BODY: undefined
+2026-05-22T03:57:01.373Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:01.374Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:01.374Z - BODY: undefined
+2026-05-22T03:57:06.394Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:06.395Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:06.395Z - BODY: undefined
+2026-05-22T03:57:11.355Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:11.355Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:11.356Z - BODY: undefined
+2026-05-22T03:57:14.346Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:57:14.347Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:57:14.347Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:57:14.366Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:57:14.367Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:57:14.367Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:57:16.372Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:16.373Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:16.374Z - BODY: undefined
+2026-05-22T03:57:21.370Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:21.371Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:21.371Z - BODY: undefined
+2026-05-22T03:57:26.387Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:26.388Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:26.389Z - BODY: undefined
+2026-05-22T03:57:31.402Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:31.403Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:31.403Z - BODY: undefined
+2026-05-22T03:57:36.423Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:36.424Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:36.425Z - BODY: undefined
+2026-05-22T03:57:41.436Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:41.437Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:41.437Z - BODY: undefined
+2026-05-22T03:57:44.369Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:57:44.370Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:57:44.370Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:57:44.379Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:57:44.380Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:57:44.381Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:57:46.436Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:46.436Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:46.437Z - BODY: undefined
+2026-05-22T03:57:51.449Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:51.450Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:51.450Z - BODY: undefined
+2026-05-22T03:57:56.452Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:57:56.452Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:57:56.453Z - BODY: undefined
+2026-05-22T03:58:01.475Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:01.476Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:01.476Z - BODY: undefined
+2026-05-22T03:58:06.491Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:06.491Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:06.492Z - BODY: undefined
+2026-05-22T03:58:11.488Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:11.489Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:11.489Z - BODY: undefined
+2026-05-22T03:58:14.363Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:58:14.364Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:58:14.364Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:58:14.377Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:58:14.377Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:58:14.377Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:58:16.502Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:16.503Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:16.503Z - BODY: undefined
+2026-05-22T03:58:21.523Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:21.524Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:21.525Z - BODY: undefined
+2026-05-22T03:58:26.534Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:26.535Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:26.535Z - BODY: undefined
+2026-05-22T03:58:31.553Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:31.554Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:31.554Z - BODY: undefined
+2026-05-22T03:58:36.574Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:36.574Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:36.574Z - BODY: undefined
+2026-05-22T03:58:41.585Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:41.585Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:41.586Z - BODY: undefined
+2026-05-22T03:58:44.361Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:58:44.362Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:58:44.362Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:58:44.376Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:58:44.377Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:58:44.377Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:58:46.604Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:46.605Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:46.605Z - BODY: undefined
+2026-05-22T03:58:51.619Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:51.620Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:51.620Z - BODY: undefined
+2026-05-22T03:58:56.636Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:58:56.637Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:58:56.637Z - BODY: undefined
+2026-05-22T03:59:01.653Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:01.653Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:01.654Z - BODY: undefined
+2026-05-22T03:59:06.669Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:06.669Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:06.670Z - BODY: undefined
+2026-05-22T03:59:11.686Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:11.687Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:11.687Z - BODY: undefined
+2026-05-22T03:59:14.392Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:59:14.393Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:59:14.394Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:59:14.413Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:59:14.414Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:59:14.415Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:59:16.707Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:16.708Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:16.708Z - BODY: undefined
+2026-05-22T03:59:21.720Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:21.720Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:21.721Z - BODY: undefined
+2026-05-22T03:59:26.738Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:26.738Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:26.739Z - BODY: undefined
+2026-05-22T03:59:31.740Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:31.740Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:31.740Z - BODY: undefined
+2026-05-22T03:59:36.753Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:36.753Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:36.753Z - BODY: undefined
+2026-05-22T03:59:41.768Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:41.769Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:41.770Z - BODY: undefined
+2026-05-22T03:59:44.504Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:59:44.505Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:59:44.505Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:59:44.520Z - REQUEST: POST /api/agents/agent-location
+2026-05-22T03:59:44.521Z - HEADERS: {"content-type":"application/json","content-length":"120","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:59:44.522Z - BODY: {"agentId":5,"phone":"9321073982","name":"Aditi Pawar","latitude":19.2056193,"longitude":73.0865071,"vehicleType":"Car"}
+2026-05-22T03:59:46.774Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:47.006Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:47.018Z - BODY: undefined
+2026-05-22T03:59:51.779Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:51.780Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:51.781Z - BODY: undefined
+2026-05-22T03:59:56.786Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T03:59:56.787Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T03:59:56.787Z - BODY: undefined
+2026-05-22T04:00:01.804Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T04:00:01.805Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T04:00:01.805Z - BODY: undefined
+2026-05-22T04:00:06.820Z - REQUEST: GET /api/bookings/inbox
+2026-05-22T04:00:06.821Z - HEADERS: {"host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0","if-none-match":"W/\"8fd-EvB2HMnsMerNU4ZRLVuYgVal3QM\""}
+2026-05-22T04:00:06.821Z - BODY: undefined

@@ -1,0 +1,120 @@
+2026-05-22T03:18:08.973Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T03:18:08.974Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"758","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:18:08.975Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "7:35 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "7:35 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "634P+6JR, , Kalyan",
+    "pickupLatitude": 19.2048461,
+    "pickupLongitude": 73.0863169,
+    "pickupTime": "8:50 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T03:18:45.027Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T03:18:45.027Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDE1NTU2NzA0","content-type":"application/json","content-length":"913","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T03:18:45.028Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsG6F53NlCOyWE",
+  "razorpayPaymentId": "pay_SsG6RfM18nFolc",
+  "razorpaySignature": "7722eca48db192c3036edc0ef9b99fed4ea37d09d499d38fc0eca1573c71eac0",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "7:35 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "7:35 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "634P+6JR, , Kalyan",
+    "pickupLatitude": 19.2048461,
+    "pickupLongitude": 73.0863169,
+    "pickupTime": "8:50 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T03:18:45.029Z - DEBUG: Received verify-payment request
+2026-05-22T03:18:45.030Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsG6F53NlCOyWE",
+  "razorpayPaymentId": "pay_SsG6RfM18nFolc",
+  "razorpaySignature": "7722eca48db192c3036edc0ef9b99fed4ea37d09d499d38fc0eca1573c71eac0",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "7:35 am",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "7:35 am",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421201",
+    "pickupAddress": "634P+6JR, , Kalyan",
+    "pickupLatitude": 19.2048461,
+    "pickupLongitude": 73.0863169,
+    "pickupTime": "8:50 AM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T03:18:45.030Z - DEBUG: Extracted fields:
+2026-05-22T03:18:45.030Z -   razorpayOrderId: order_SsG6F53NlCOyWE
+2026-05-22T03:18:45.031Z -   razorpayPaymentId: pay_SsG6RfM18nFolc
+2026-05-22T03:18:45.031Z -   razorpaySignature: 7722eca48db192c3036edc0ef9b99fed4ea37d09d499d38fc0eca1573c71eac0
+2026-05-22T03:18:45.032Z -   bookingData: present
+2026-05-22T03:18:45.366Z - ✅ Booking created successfully - ID: 39

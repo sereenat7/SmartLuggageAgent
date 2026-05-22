@@ -1,0 +1,240 @@
+2026-05-22T09:55:43.940Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T09:55:43.942Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"783","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T09:55:43.943Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "3:24 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "3:24 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421202",
+    "pickupAddress": ", Mankoli, Maharashtra, India, 421202",
+    "pickupLatitude": 19.223336225,
+    "pickupLongitude": 73.079243875,
+    "pickupTime": "3:50 PM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T09:56:30.221Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T09:56:30.222Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"938","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T09:56:30.223Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsMsDTOBmmAp9l",
+  "razorpayPaymentId": "pay_SsMsO5kBRwvYFd",
+  "razorpaySignature": "a7328e276f7ad3735d7a52f183da750fa95ffbd1dac7762f3f495b581082100a",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "3:24 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "3:24 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421202",
+    "pickupAddress": ", Mankoli, Maharashtra, India, 421202",
+    "pickupLatitude": 19.223336225,
+    "pickupLongitude": 73.079243875,
+    "pickupTime": "3:50 PM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T09:56:30.226Z - DEBUG: Received verify-payment request
+2026-05-22T09:56:30.227Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsMsDTOBmmAp9l",
+  "razorpayPaymentId": "pay_SsMsO5kBRwvYFd",
+  "razorpaySignature": "a7328e276f7ad3735d7a52f183da750fa95ffbd1dac7762f3f495b581082100a",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "3:24 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "3:24 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421202",
+    "pickupAddress": ", Mankoli, Maharashtra, India, 421202",
+    "pickupLatitude": 19.223336225,
+    "pickupLongitude": 73.079243875,
+    "pickupTime": "3:50 PM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T09:56:30.228Z - DEBUG: Extracted fields:
+2026-05-22T09:56:30.229Z -   razorpayOrderId: order_SsMsDTOBmmAp9l
+2026-05-22T09:56:30.230Z -   razorpayPaymentId: pay_SsMsO5kBRwvYFd
+2026-05-22T09:56:30.232Z -   razorpaySignature: a7328e276f7ad3735d7a52f183da750fa95ffbd1dac7762f3f495b581082100a
+2026-05-22T09:56:30.233Z -   bookingData: present
+2026-05-22T09:56:32.076Z - ✅ Booking created successfully - ID: 50
+2026-05-22T10:05:39.594Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-22T10:05:39.600Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"784","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T10:05:39.601Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "3:34 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "3:34 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421202",
+    "pickupAddress": ", Mankoli, Maharashtra, India, 421202",
+    "pickupLatitude": 19.223336225,
+    "pickupLongitude": 73.079243875,
+    "pickupTime": "3:57 PM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T10:06:08.349Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-22T10:06:08.350Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTMyMTA3Mzk4MjoxNzc5NDM0OTQyMzYz","content-type":"application/json","content-length":"939","host":"10.165.227.44:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-22T10:06:08.351Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_SsN2haiffthFr4",
+  "razorpayPaymentId": "pay_SsN2oNs3vLKETS",
+  "razorpaySignature": "d8f135f18c2928b3c7e2da03eb77c2a02408bb2d73cb016c42e1a670be33809a",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "3:34 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "3:34 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421202",
+    "pickupAddress": ", Mankoli, Maharashtra, India, 421202",
+    "pickupLatitude": 19.223336225,
+    "pickupLongitude": 73.079243875,
+    "pickupTime": "3:57 PM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T10:06:08.352Z - DEBUG: Received verify-payment request
+2026-05-22T10:06:08.353Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_SsN2haiffthFr4",
+  "razorpayPaymentId": "pay_SsN2oNs3vLKETS",
+  "razorpaySignature": "d8f135f18c2928b3c7e2da03eb77c2a02408bb2d73cb016c42e1a670be33809a",
+  "bookingData": {
+    "username": "Aditi",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Air India",
+    "flightNumber": "1111",
+    "terminal": "T2",
+    "departureCity": "Delhi",
+    "departureAirport": "Indira Gandhi Intl",
+    "departureDate": "22/05/2026",
+    "departureTime": "3:34 pm",
+    "arrivalCity": "Delhi",
+    "arrivalAirport": "Indira Gandhi Intl",
+    "arrivalDate": "22/05/2026",
+    "arrivalTime": "3:34 pm",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "421202",
+    "pickupAddress": ", Mankoli, Maharashtra, India, 421202",
+    "pickupLatitude": 19.223336225,
+    "pickupLongitude": 73.079243875,
+    "pickupTime": "3:57 PM",
+    "dropAddress": "Indira Gandhi Intl - Terminal 2",
+    "dropLatitude": 28.5536096,
+    "dropLongitude": 77.0887584,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-22T10:06:08.355Z - DEBUG: Extracted fields:
+2026-05-22T10:06:08.355Z -   razorpayOrderId: order_SsN2haiffthFr4
+2026-05-22T10:06:08.356Z -   razorpayPaymentId: pay_SsN2oNs3vLKETS
+2026-05-22T10:06:08.357Z -   razorpaySignature: d8f135f18c2928b3c7e2da03eb77c2a02408bb2d73cb016c42e1a670be33809a
+2026-05-22T10:06:08.358Z -   bookingData: present
+2026-05-22T10:06:08.627Z - ✅ Booking created successfully - ID: 51
