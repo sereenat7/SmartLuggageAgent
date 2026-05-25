@@ -279,7 +279,7 @@ export default function BookingSummary() {
 
       // Verify payment with backend
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.104:5000'}/api/payment/verify-payment`,
+        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000'}/api/payment/verify-payment`,
         {
           method: 'POST',
           headers: {

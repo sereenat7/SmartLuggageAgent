@@ -14,7 +14,7 @@ export default function BookingDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(null);
 
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.104:5000'}/api/bookings`;
+  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000'}/api/bookings`;
 
   useEffect(() => {
     fetchBookingDetails();
