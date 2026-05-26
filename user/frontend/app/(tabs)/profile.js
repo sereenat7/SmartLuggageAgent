@@ -136,7 +136,7 @@ export default function Profile() {
           <View style={styles.cardGroup}>
             <ProfileOption icon="account-edit" title="Edit Profile" color="#4F46E5" onPress={() => router.push('/editprofile')} />
             <View style={styles.divider} />
-            <ProfileOption icon="map-marker" title="Saved Address" color="#10B981" onPress={() => {}} />
+            <ProfileOption icon="map-marker" title="Saved Address" color="#10B981" onPress={() => router.push('/(booking)/saved-addresses')} />
           </View>
 
           <Text style={styles.sectionLabel}>SUPPORT</Text>

@@ -7,7 +7,10 @@ import {
   ActivityIndicator,
   Animated,
   PanResponder,
-  TextInput
+  TextInput,
+  Modal,
+  FlatList,
+  Alert
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
@@ -41,6 +44,10 @@ export default function MapScreen() {
 
   const [lockExpand, setLockExpand] = useState(false);
   const [userSelected, setUserSelected] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactsList, setContactsList] = useState([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [contactSearchQuery, setContactSearchQuery] = useState("");
 
   const sheetHeight = useRef(new Animated.Value(160)).current;
 
@@ -51,12 +58,27 @@ export default function MapScreen() {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const json = await AsyncStorage.getItem("loggedInUser");
-        if (json) {
-          const user = JSON.parse(json);
+        // Try to load from userData first
+        const userData = await AsyncStorage.getItem("userData");
+        if (userData) {
+          const user = JSON.parse(userData);
           setName(user.name || "");
-          setMobile(user.phone || "");
+          // Clean phone number: remove +91 and non-digits, keep last 10 digits
+          const cleanedPhone = (user.phone || "").replace(/\D/g, '').slice(-10);
+          setMobile(cleanedPhone);
+          console.log("✅ Sender details auto-filled from login:", user.name, cleanedPhone);
+          return;
         }
+        
+        // Fallback: load from individual fields
+        const userName = await AsyncStorage.getItem("userName");
+        const userPhone = await AsyncStorage.getItem("userPhone");
+        if (userName) setName(userName);
+        if (userPhone) {
+          const cleanedPhone = userPhone.replace(/\D/g, '').slice(-10);
+          setMobile(cleanedPhone);
+        }
+        console.log("✅ Sender details auto-filled from individual fields:", userName, userPhone?.replace(/\D/g, '').slice(-10));
       } catch (err) {
         console.log("Error loading user from storage:", err);
       }
@@ -110,6 +132,14 @@ export default function MapScreen() {
       setMarkerCoord({ latitude: lat, longitude: lon });
       setSelectedAddress(params.selectedAddress);
 
+      // Load saved address data if coming from saved addresses
+      if (params.sourceScreen === "saved-addresses") {
+        if (params.house) setHouse(params.house);
+        if (params.name) setName(params.name);
+        if (params.mobile) setMobile(params.mobile);
+        if (params.tag) setSelectedTag(params.tag);
+      }
+
       manualSelectionDone.current = true;
     }
   }, [params.lat, params.lon, params.selectedAddress]);
@@ -136,17 +166,57 @@ export default function MapScreen() {
 
   const pickContact = async () => {
     const { status } = await Contacts.requestPermissionsAsync();
-    if (status !== "granted") return;
-
-    const { data } = await Contacts.getContactsAsync({
-      fields: [Contacts.Fields.PhoneNumbers],
-    });
-
-    if (data.length > 0) {
-      const contact = data[0];
-      setName(contact.name || "");
-      setMobile(contact.phoneNumbers?.[0]?.number || "");
+    if (status !== "granted") {
+      Alert.alert("Permission Denied", "Please allow access to contacts");
+      return;
     }
+
+    setLoadingContacts(true);
+    try {
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers],
+      });
+
+      // Filter contacts that have phone numbers
+      const contactsWithPhone = data.filter(c => c.phoneNumbers && c.phoneNumbers.length > 0);
+      
+      if (contactsWithPhone.length === 0) {
+        Alert.alert("No Contacts", "No contacts with phone numbers found");
+        return;
+      }
+
+      setContactsList(contactsWithPhone);
+      setShowContactModal(true);
+    } catch (err) {
+      console.error("Error loading contacts:", err);
+      Alert.alert("Error", "Failed to load contacts");
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
+
+  const selectContact = (contact) => {
+    // Get first phone number
+    const phoneNumber = contact.phoneNumbers?.[0]?.number || "";
+    // Clean phone number (remove spaces, dashes, etc.)
+    const cleanPhone = phoneNumber.replace(/\D/g, '').slice(-10);
+    
+    setName(contact.name || "");
+    setMobile(cleanPhone);
+    setShowContactModal(false);
+    setContactSearchQuery(""); // Clear search
+    console.log("✅ Contact selected:", contact.name, cleanPhone);
+  };
+
+  const getFilteredContacts = () => {
+    if (!contactSearchQuery.trim()) return contactsList;
+    
+    const query = contactSearchQuery.toLowerCase();
+    return contactsList.filter(contact => {
+      const nameMatch = (contact.name || "").toLowerCase().includes(query);
+      const phoneMatch = (contact.phoneNumbers?.[0]?.number || "").includes(contactSearchQuery);
+      return nameMatch || phoneMatch;
+    });
   };
 
   const expandSheet = () => {
@@ -223,12 +293,29 @@ export default function MapScreen() {
     JSON.stringify(pickupData)
   );
 
+  // ✅ ONLY SAVE TO SAVED ADDRESSES LIST IF COMING FROM SAVED-ADDRESSES (EXPLICIT ADD)
+  if (sourceScreen === "saved-addresses" && selectedTag) {
+    try {
+      const savedAddrs = await AsyncStorage.getItem("savedPickupAddresses");
+      let addressList = savedAddrs ? JSON.parse(savedAddrs) : [];
+      
+      // Check if address already exists
+      const exists = addressList.findIndex(addr => addr.tag === pickupData.tag && addr.address === pickupData.address);
+      
+      if (exists === -1) {
+        // Add new address only if coming from saved-addresses
+        addressList.push(pickupData);
+        await AsyncStorage.setItem("savedPickupAddresses", JSON.stringify(addressList));
+        console.log("✅ Address saved to saved addresses:", pickupData.tag);
+      }
+    } catch (err) {
+      console.log("Error saving to address list:", err);
+    }
+  }
+
     // ✅ Route back based on source screen
     // IMPORTANT: Use router.back() to preserve the entire navigation stack
-    if (sourceScreen === "search_pickup") {
-      // Save pickup to AsyncStorage, then use back button to return with data preserved
-      router.back();
-    } else if (sourceScreen === "pickup") {
+    if (sourceScreen === "search_pickup" || sourceScreen === "pickup" || sourceScreen === "saved-addresses") {
       // Save pickup to AsyncStorage, then use back button to return with data preserved
       router.back();
     } else {
@@ -331,7 +418,18 @@ export default function MapScreen() {
 
             <View style={styles.field}>
               <Text style={styles.label}>Sender's Mobile number</Text>
-              <TextInput style={styles.input} value={mobile} onChangeText={setMobile} keyboardType="phone-pad" />
+              <TextInput 
+                style={styles.input} 
+                value={mobile} 
+                onChangeText={(text) => {
+                  // Remove all non-digits, then keep only last 10 digits
+                  const cleaned = text.replace(/\D/g, '').slice(-10);
+                  setMobile(cleaned);
+                }} 
+                keyboardType="phone-pad"
+                placeholder="10-digit number"
+                maxLength={10}
+              />
             </View>
 
             {/* ✅ SAME UI KEPT */}
@@ -366,6 +464,74 @@ export default function MapScreen() {
           </KeyboardAwareScrollView>
         )}
       </Animated.View>
+
+      {/* Contact Picker Modal */}
+      <Modal visible={showContactModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Contact</Text>
+              <TouchableOpacity onPress={() => {
+                setShowContactModal(false);
+                setContactSearchQuery("");
+              }}>
+                <Ionicons name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Input */}
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color="#999" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search by name or phone"
+                value={contactSearchQuery}
+                onChangeText={setContactSearchQuery}
+                placeholderTextColor="#999"
+              />
+              {contactSearchQuery ? (
+                <TouchableOpacity onPress={() => setContactSearchQuery("")}>
+                  <Ionicons name="close-circle" size={20} color="#999" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {loadingContacts ? (
+              <View style={styles.centerLoader}>
+                <ActivityIndicator size="large" color="#2D6CDF" />
+              </View>
+            ) : (
+              <FlatList
+                data={getFilteredContacts()}
+                keyExtractor={(item, index) => index.toString()}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.contactItem}
+                    onPress={() => selectContact(item)}
+                  >
+                    <View style={styles.contactIcon}>
+                      <Ionicons name="person-circle" size={40} color="#2D6CDF" />
+                    </View>
+                    <View style={styles.contactInfo}>
+                      <Text style={styles.contactName}>{item.name}</Text>
+                      <Text style={styles.contactPhone}>
+                        {item.phoneNumbers?.[0]?.number || "No phone"}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </TouchableOpacity>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="search" size={48} color="#ddd" />
+                    <Text style={styles.emptyText}>No contacts found</Text>
+                  </View>
+                }
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -402,5 +568,20 @@ const styles = StyleSheet.create({
   saveText: { fontSize: 13, color: "#444" },
   changeBtn: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#2D6CDF", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: "#F5F9FF" },
   changeText: { color: "#2D6CDF", fontWeight: "600", fontSize: 13 },
-  finalBtn: { backgroundColor: "#2D6CDF", padding: 15, borderRadius: 12, marginTop: 20, alignItems: "center" }
+  finalBtn: { backgroundColor: "#2D6CDF", padding: 15, borderRadius: 12, marginTop: 20, alignItems: "center" },
+  // Modal Styles
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  modalContainer: { backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: "80%", paddingBottom: 20 },
+  modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: "#eee" },
+  modalTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
+  searchContainer: { flexDirection: "row", alignItems: "center", paddingHorizontal: 15, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#f0f0f0", backgroundColor: "#f9f9f9" },
+  searchInput: { flex: 1, marginHorizontal: 10, paddingVertical: 8, fontSize: 14, color: "#000" },
+  centerLoader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  contactItem: { flexDirection: "row", alignItems: "center", paddingHorizontal: 15, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#f0f0f0" },
+  contactIcon: { marginRight: 12 },
+  contactInfo: { flex: 1 },
+  contactName: { fontSize: 15, fontWeight: "600", color: "#000" },
+  contactPhone: { fontSize: 13, color: "#999", marginTop: 2 },
+  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingVertical: 40 },
+  emptyText: { fontSize: 14, color: "#999", marginTop: 10 }
 });

@@ -35,9 +35,17 @@ export default function OtpScreen() {
           console.error('DEBUG OTP: No token received from backend!');
         }
         
-        // SAVE NAME TO STORAGE PERMANENTLY
-        if (data.user?.name) {
+        // Save full user data to storage
+        if (data.user) {
           await AsyncStorage.setItem("userName", data.user.name);
+          await AsyncStorage.setItem("userPhone", data.user.phone);
+          await AsyncStorage.setItem("userEmail", data.user.email || "");
+          await AsyncStorage.setItem("userData", JSON.stringify({
+            name: data.user.name,
+            phone: data.user.phone,
+            email: data.user.email
+          }));
+          console.log("DEBUG OTP: User data saved:", data.user.name, data.user.phone);
         }
          global.userPhone = data.user.phone;
          console.log("LOGIN PHONE:", global.userPhone);

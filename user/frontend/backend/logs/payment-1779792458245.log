@@ -1,0 +1,120 @@
+2026-05-26T10:55:49.783Z - 💳 [PAYMENT] Incoming request: POST /create-order
+2026-05-26T10:55:49.790Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTAwNDIyMzU1MzoxNzc5NzkyOTE5Nzg4","content-type":"application/json","content-length":"836","host":"10.21.115.52:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-26T10:55:49.794Z - 💳 [PAYMENT] Body: {
+  "amount": 1,
+  "bookingDetails": {
+    "username": "Anjali Mishra",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Akasa Air",
+    "flightNumber": "28822UEJ",
+    "terminal": "T2",
+    "departureCity": "Kolkata",
+    "departureAirport": "Netaji Subhash Chandra Bose Intl",
+    "departureDate": "26/05/2026",
+    "departureTime": "4:24 PM",
+    "arrivalCity": "Kolkata",
+    "arrivalAirport": "Netaji Subhash Chandra Bose Intl",
+    "arrivalDate": "26/05/2026",
+    "arrivalTime": "4:24 PM",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "",
+    "pickupAddress": "3RHX+RC7, Chaitanya Nagar Lane, Mumbai",
+    "pickupLatitude": 19.0797451,
+    "pickupLongitude": 72.8485882,
+    "pickupTime": "12:54 PM",
+    "dropAddress": "Netaji Subhash Chandra Bose Intl - Terminal 2",
+    "dropLatitude": 22.648631,
+    "dropLongitude": 88.445417,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-26T10:56:24.821Z - 💳 [PAYMENT] Incoming request: POST /verify-payment
+2026-05-26T10:56:24.827Z - 💳 [PAYMENT] Headers: {"authorization":"Bearer KzkxOTAwNDIyMzU1MzoxNzc5NzkyOTE5Nzg4","content-type":"application/json","content-length":"991","host":"10.21.115.52:5000","connection":"Keep-Alive","accept-encoding":"gzip","user-agent":"okhttp/4.12.0"}
+2026-05-26T10:56:24.829Z - 💳 [PAYMENT] Body: {
+  "razorpayOrderId": "order_Sty1U0vtTddZZm",
+  "razorpayPaymentId": "pay_Sty1bhPZmSCprN",
+  "razorpaySignature": "9fd8e3814b19ae46d66511afb0f7c86fc7702532c39412752074733cd4af785f",
+  "bookingData": {
+    "username": "Anjali Mishra",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Akasa Air",
+    "flightNumber": "28822UEJ",
+    "terminal": "T2",
+    "departureCity": "Kolkata",
+    "departureAirport": "Netaji Subhash Chandra Bose Intl",
+    "departureDate": "26/05/2026",
+    "departureTime": "4:24 PM",
+    "arrivalCity": "Kolkata",
+    "arrivalAirport": "Netaji Subhash Chandra Bose Intl",
+    "arrivalDate": "26/05/2026",
+    "arrivalTime": "4:24 PM",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "",
+    "pickupAddress": "3RHX+RC7, Chaitanya Nagar Lane, Mumbai",
+    "pickupLatitude": 19.0797451,
+    "pickupLongitude": 72.8485882,
+    "pickupTime": "12:54 PM",
+    "dropAddress": "Netaji Subhash Chandra Bose Intl - Terminal 2",
+    "dropLatitude": 22.648631,
+    "dropLongitude": 88.445417,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-26T10:56:24.837Z - DEBUG: Received verify-payment request
+2026-05-26T10:56:24.840Z - DEBUG: Request body: {
+  "razorpayOrderId": "order_Sty1U0vtTddZZm",
+  "razorpayPaymentId": "pay_Sty1bhPZmSCprN",
+  "razorpaySignature": "9fd8e3814b19ae46d66511afb0f7c86fc7702532c39412752074733cd4af785f",
+  "bookingData": {
+    "username": "Anjali Mishra",
+    "isInternational": false,
+    "isDomestic": true,
+    "airlineName": "Akasa Air",
+    "flightNumber": "28822UEJ",
+    "terminal": "T2",
+    "departureCity": "Kolkata",
+    "departureAirport": "Netaji Subhash Chandra Bose Intl",
+    "departureDate": "26/05/2026",
+    "departureTime": "4:24 PM",
+    "arrivalCity": "Kolkata",
+    "arrivalAirport": "Netaji Subhash Chandra Bose Intl",
+    "arrivalDate": "26/05/2026",
+    "arrivalTime": "4:24 PM",
+    "bagCount": 1,
+    "bagWeight": "10-20 kg",
+    "isFragile": false,
+    "isCheckin": false,
+    "pincode": "",
+    "pickupAddress": "3RHX+RC7, Chaitanya Nagar Lane, Mumbai",
+    "pickupLatitude": 19.0797451,
+    "pickupLongitude": 72.8485882,
+    "pickupTime": "12:54 PM",
+    "dropAddress": "Netaji Subhash Chandra Bose Intl - Terminal 2",
+    "dropLatitude": 22.648631,
+    "dropLongitude": 88.445417,
+    "photos": [],
+    "additionalInfo": "",
+    "amount": 1,
+    "paymentMethod": "card"
+  }
+}
+2026-05-26T10:56:24.842Z - DEBUG: Extracted fields:
+2026-05-26T10:56:24.844Z -   razorpayOrderId: order_Sty1U0vtTddZZm
+2026-05-26T10:56:24.846Z -   razorpayPaymentId: pay_Sty1bhPZmSCprN
+2026-05-26T10:56:24.848Z -   razorpaySignature: 9fd8e3814b19ae46d66511afb0f7c86fc7702532c39412752074733cd4af785f
+2026-05-26T10:56:24.849Z -   bookingData: present
+2026-05-26T10:56:25.163Z - ✅ Booking created successfully - ID: 82

@@ -79,10 +79,17 @@ export default function LoginScreen() {
             console.error('DEBUG LOGIN: No token received from backend!');
           }
           
-          // Save user name to AsyncStorage
-          if (data.user?.name) {
+          // Save full user data to AsyncStorage
+          if (data.user) {
             await AsyncStorage.setItem('userName', data.user.name);
-            console.log('DEBUG LOGIN: Name saved to AsyncStorage:', data.user.name);
+            await AsyncStorage.setItem('userPhone', data.user.phone);
+            await AsyncStorage.setItem('userEmail', data.user.email || '');
+            await AsyncStorage.setItem('userData', JSON.stringify({
+              name: data.user.name,
+              phone: data.user.phone,
+              email: data.user.email
+            }));
+            console.log('DEBUG LOGIN: User data saved:', data.user.name, data.user.phone);
           }
           
           global.userPhone = data.user.phone;

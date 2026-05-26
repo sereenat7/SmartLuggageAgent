@@ -90,46 +90,71 @@ export default function Pickup() {
         <Text style={styles.headerTitle}>Where is your pickup?</Text>
       </View>
 
-      {/* ---------- SEARCH BAR ---------- */}
+      {/* ---------- SEARCH BAR AT TOP ---------- */}
       <View style={styles.searchContainer}>
         <View style={styles.searchInputWrapper}>
           <Ionicons name="search" size={20} color="#777" style={{ marginRight: 8 }} />
           <TextInput
-            placeholder="Search for address"
+            placeholder="Search for Address"
             value={query}
             onChangeText={handleSearch}
             style={styles.searchInput}
+            placeholderTextColor="#999"
           />
+          {query ? (
+            <TouchableOpacity onPress={() => { setQuery(""); setSuggestions([]); }}>
+              <Ionicons name="close-circle" size={20} color="#999" />
+            </TouchableOpacity>
+          ) : (
+            <Ionicons name="mic" size={20} color="#FF5F5F" />
+          )}
         </View>
       </View>
 
-      {/* ---------- ADDRESS SUGGESTIONS ---------- */}
-      <FlatList
-        contentContainerStyle={{ paddingBottom: 120 }}
-        data={suggestions}
-        keyExtractor={(item, index) => index.toString()}
-        renderItem={({ item }) => (
-          <TouchableOpacity 
-            onPress={() => selectAddress(item)} 
-            style={styles.addressItem}
+      {/* ---------- ACTION BUTTONS ---------- */}
+      {suggestions.length === 0 && (
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => router.push({
+              pathname: "/(booking)/map",
+              params: { sourceScreen: sourceScreen }
+            })}
           >
-            <Ionicons name="location-sharp" size={20} color="#0A66FF" style={{ marginRight: 12 }} />
-            <Text style={{ fontSize: 14, color: "#1A1C1E" }}>{item.formatted}</Text>
+            <Ionicons name="map" size={20} color="#FF5F5F" style={{ marginRight: 8 }} />
+            <Text style={styles.actionBtnText}>Select on map</Text>
           </TouchableOpacity>
-        )}
-      />
 
-      {/* ---------- BOTTOM BUTTON ---------- */}
-      <TouchableOpacity 
-        onPress={() => router.push({
-          pathname: "/(booking)/map",
-          params: { sourceScreen: sourceScreen }
-        })}
-        style={styles.selectMapBtn}
-      >
-        <Ionicons name="map" size={20} color="#FFF" style={{ marginRight: 8 }} />
-        <Text style={styles.selectMapBtnText}>Select on Map</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionBtn}
+            onPress={() => router.push("/(booking)/saved-addresses")}
+          >
+            <Ionicons name="heart" size={20} color="#FF5F5F" style={{ marginRight: 8 }} />
+            <Text style={styles.actionBtnText}>Saved Addresses</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* ---------- SEARCH RESULTS ---------- */}
+      {suggestions.length > 0 && (
+        <FlatList
+          contentContainerStyle={{ paddingBottom: 0, marginLeft: 16 }}
+          data={suggestions}
+          keyExtractor={(item, index) => index.toString()}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              onPress={() => selectAddress(item)} 
+              style={styles.addressItem}
+            >
+              <Ionicons name="location-sharp" size={20} color="#2D6CDF" style={{ marginRight: 12, marginTop: 2 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.addressItemTitle}>{item.formatted.split(',')[0]}</Text>
+                <Text style={styles.addressItemSubtitle}>{item.formatted}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -159,56 +184,75 @@ const styles = StyleSheet.create({
     color: "#1A1C1E"
   },
   searchContainer: {
-    paddingHorizontal: 20,
-    marginTop: 25
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: "#FFF",
   },
   searchInputWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#FFF",
-    borderRadius: 15,
-    paddingHorizontal: 12,
+    backgroundColor: "#F5F9FF",
+    borderRadius: 20,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    elevation: 3,
+    borderWidth: 2,
+    borderColor: "#FF5F5F",
+    elevation: 2,
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 5
   },
   searchInput: {
     flex: 1,
-    fontSize: 14
+    fontSize: 16,
+    color: "#1A1C1E",
+    marginHorizontal: 8
+  },
+  actionsContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    gap: 40,
+    backgroundColor: "#FFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  actionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 0
+  },
+  actionBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#FF5F5F",
+    marginLeft: 6
   },
   addressItem: {
     flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#F3F3F3",
+    alignItems: "flex-start",
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    marginHorizontal: 0,
+    marginVertical: 0,
+    borderRadius: 0,
     backgroundColor: "#FFF",
-    marginTop: 5,
-    marginHorizontal: 10,
-    borderRadius: 12
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0"
   },
-  selectMapBtn: {
-    position: "absolute",
-    bottom: 25,
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    backgroundColor: "#FF5F5F",
-    paddingVertical: 15,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 5
+  addressItemTitle: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1A1C1E",
+    marginBottom: 3
   },
-  selectMapBtnText: {
-    color: "#FFF",
-    fontWeight: "700",
-    fontSize: 16
+  addressItemSubtitle: {
+    fontSize: 12,
+    color: "#999",
+    marginTop: 1
   }
 }); 
