@@ -14,10 +14,10 @@ import {
   loadIndianAirports, 
   loadGlobalAirlines 
 } from '../airportUtils';
-import { normalizeAirportName } from '../../utils/airportMappings'; 
+import { normalizeAirportName } from '../../utils/airportMappings';
+import pincodes from '../../assets/data/pincodes.json';
 
 const { width } = Dimensions.get('window');
-const SERVICEABLE_PINS = ['401303', '400001', '401202', '401208', '110001'];
 
 export default function FlightDetails() {
   // --- States ---
@@ -69,7 +69,7 @@ export default function FlightDetails() {
       Alert.alert("Invalid PIN", "Please enter a valid 6-digit PIN code.");
       return;
     }
-    if (SERVICEABLE_PINS.includes(userPin)) {
+    if (pincodes.includes(userPin)) {
       setPinModalVisible(false);
     } else {
       Alert.alert(
