@@ -95,6 +95,31 @@ const verifyToken = (req, res, next) => {
   }
 };
 
+const buildBookingNotes = (bookingDetails) => {
+  if (!bookingDetails || typeof bookingDetails !== 'object') {
+    return {};
+  }
+
+  const notes = {
+    username: bookingDetails.username || '',
+    flightNumber: bookingDetails.flightNumber || '',
+    departureDate: bookingDetails.departureDate || '',
+    departureTime: bookingDetails.departureTime || '',
+    pickupAddress: bookingDetails.pickupAddress || '',
+    dropAddress: bookingDetails.dropAddress || '',
+    bagCount: bookingDetails.bagCount ?? '',
+    amount: bookingDetails.amount ?? '',
+  };
+
+  if (bookingDetails.phone) {
+    notes.phone = bookingDetails.phone;
+  }
+
+  return Object.fromEntries(
+    Object.entries(notes).filter(([, value]) => value !== '' && value !== null && value !== undefined)
+  );
+};
+
 // Create Razorpay Order
 router.post("/create-order", verifyToken, async (req, res) => {
   try {
@@ -113,7 +138,7 @@ router.post("/create-order", verifyToken, async (req, res) => {
       receipt: `booking_${Date.now()}`,
       notes: {
         phone: req.phone,
-        bookingDetails: JSON.stringify(bookingDetails),
+        ...buildBookingNotes(bookingDetails),
         appName: "SmartLuggageAgent"
       }
     };

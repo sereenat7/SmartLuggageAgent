@@ -31,8 +31,8 @@ const host = '0.0.0.0';
 
 // Middleware
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json({ limit: '100mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '100mb' }));
 
 // COMPREHENSIVE DEBUG Logger - logs ALL requests
 app.use((req, res, next) => {

@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const IP_ADDRESS = process.env.EXPO_PUBLIC_API_HOST || "10.227.242.44";
+const IP_ADDRESS = process.env.EXPO_PUBLIC_API_HOST || "10.159.173.44";
 const API_URL = `http://${IP_ADDRESS}:5000/api/auth`;
 
 export default function EditProfile() {
@@ -41,7 +41,7 @@ export default function EditProfile() {
           setPhone(result.phone);
           setEmail(result.email && result.email !== "Not provided" ? result.email : "");
         }
-      } catch (error) {
+      } catch (_error) {
         Alert.alert("Error", "Failed to load profile data");
       } finally {
         setLoading(false);
@@ -88,7 +88,7 @@ export default function EditProfile() {
       } else {
         Alert.alert("Update Failed", result.message);
       }
-    } catch (error) {
+    } catch (_error) {
       Alert.alert("Error", "Could not connect to server");
     } finally {
       setSaving(false);

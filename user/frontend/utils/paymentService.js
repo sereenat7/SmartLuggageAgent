@@ -1,8 +1,25 @@
-import { Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from './api';
 
-// Backend API URL from .env file - change EXPO_PUBLIC_API_URL in .env to update
-const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000'}/api/payment`;
+// Backend API URL from the shared API helper so every payment call uses the same base.
+const API_URL = `${API_BASE_URL}/api/payment`;
+
+const readErrorMessage = async (response) => {
+  try {
+    const text = await response.text();
+    if (!text) {
+      return `HTTP ${response.status}`;
+    }
+
+    try {
+      const data = JSON.parse(text);
+      return data.message || data.error || `HTTP ${response.status}`;
+    } catch (_error) {
+      return text;
+    }
+  } catch (_error) {
+    return `HTTP ${response.status}`;
+  }
+};
 
 /**
  * Create a Razorpay order
@@ -13,6 +30,7 @@ const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000
  */
 export const createRazorpayOrder = async (amount, bookingDetails, token) => {
   try {
+    console.log('Payment API URL:', API_URL);
     const response = await fetch(`${API_URL}/create-order`, {
       method: 'POST',
       headers: {
@@ -24,6 +42,10 @@ export const createRazorpayOrder = async (amount, bookingDetails, token) => {
         bookingDetails: bookingDetails,
       }),
     });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
 
     const data = await response.json();
 
@@ -54,6 +76,7 @@ export const verifyRazorpayPayment = async (
   token
 ) => {
   try {
+    console.log('Payment API URL:', API_URL);
     const response = await fetch(`${API_URL}/verify-payment`, {
       method: 'POST',
       headers: {
@@ -67,6 +90,10 @@ export const verifyRazorpayPayment = async (
         bookingData: bookingData,
       }),
     });
+
+    if (!response.ok) {
+      throw new Error(await readErrorMessage(response));
+    }
 
     const data = await response.json();
 

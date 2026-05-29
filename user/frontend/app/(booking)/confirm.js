@@ -11,6 +11,7 @@ import { WebView } from 'react-native-webview';
 import { createBooking } from '../../utils/bookingService';
 import { calculatePrice, calculateDistance } from '../../utils/pricingCalculator';
 import { createRazorpayOrder, verifyRazorpayPayment } from '../../utils/paymentService';
+import { normalizeImageList } from '../utils/imageHelpers';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import * as Location from 'expo-location';
 
@@ -183,6 +184,8 @@ export default function BookingSummary() {
         console.log("Could not parse photos:", e);
       }
 
+      const normalizedPhotos = await normalizeImageList(photosArray);
+
       // Prepare booking data
       const bookingData = {
         // User details
@@ -224,7 +227,7 @@ export default function BookingSummary() {
         dropLongitude: dropCoords.longitude,
 
         // Photos
-        photos: photosArray,
+        photos: normalizedPhotos,
 
         // Additional Info
         additionalInfo: additionalInfo,
@@ -279,7 +282,7 @@ export default function BookingSummary() {
 
       // Verify payment with backend
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000'}/api/payment/verify-payment`,
+        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.159.173.44:5000'}/api/payment/verify-payment`,
         {
           method: 'POST',
           headers: {

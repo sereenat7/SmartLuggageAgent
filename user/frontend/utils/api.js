@@ -1,6 +1,4 @@
-import Constants from 'expo-constants';
-
-const LAN_HOST = process.env.EXPO_PUBLIC_API_HOST || '10.227.242.44';
+const LAN_HOST = process.env.EXPO_PUBLIC_API_HOST || '10.159.173.44';
 
 export const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL || `http://${LAN_HOST}:5000`;

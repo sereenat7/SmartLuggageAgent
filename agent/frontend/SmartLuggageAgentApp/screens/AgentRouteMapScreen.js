@@ -70,6 +70,7 @@ const buildInitialRegion = (agentLocation, customerLocation) => {
 const buildTaskFromRequest = (request) => ({
   id: request?.sessionId ? `session-${request.sessionId}` : `request-${request?.queueId || Date.now()}`,
   sessionId: request?.sessionId || null,
+  bookingId: request?.bookingId || null,
   agentName: request?.agentName || 'Agent',
   agentId: request?.agentId || null,
   type: 'Pickup',
@@ -90,7 +91,6 @@ export default function AgentRouteMapScreen({ navigation, route }) {
   const bookingIdFromParams =
     route?.params?.bookingId ||
     request?.bookingId ||
-    request?.id ||
     null;
 
   const [customerFromServer, setCustomerFromServer] = useState(null);
@@ -324,6 +324,7 @@ export default function AgentRouteMapScreen({ navigation, route }) {
               bookingId: bookingIdFromParams,
               sessionId: request?.sessionId,
             }),
+            bookingId: bookingIdFromParams,
           },
         }],
       });
@@ -359,7 +360,16 @@ export default function AgentRouteMapScreen({ navigation, route }) {
           <Ionicons name="navigate" size={20} color="#111827" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => {
+            if (navigation.canGoBack && navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Dashboard', { activeTab: 'In Progress', refreshInbox: true });
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={22} color="#111827" />
         </TouchableOpacity>
 

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { normalizeImageList } from './imageHelpers';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.159.173.44:5000';
 
 // Convert DD/MM/YYYY to YYYY-MM-DD format for MySQL
 const convertDateToMySQLFormat = (dateStr) => {
@@ -83,6 +84,7 @@ export const createBooking = async (bookingData) => {
     }
 
     // Convert date and time fields to MySQL format
+    const normalizedPhotos = await normalizeImageList(bookingData.photos);
     const convertedData = {
       ...bookingData,
       departureDate: convertDateToMySQLFormat(bookingData.departureDate),
@@ -90,6 +92,7 @@ export const createBooking = async (bookingData) => {
       pickupTime: convertTimeToMySQLFormat(bookingData.pickupTime),
       bagWeight: extractBagWeight(bookingData.bagWeight),
       pincode: convertPincode(bookingData.pincode),
+      photos: normalizedPhotos,
     };
 
     console.log('DEBUG: Making API call to:', `${API_BASE_URL}/api/bookings/create`);

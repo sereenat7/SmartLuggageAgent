@@ -225,6 +225,7 @@ export default function DashboardScreen({ navigation, route }) {
       await fetchInbox();
 
       if (action === 'accept') {
+        const referenceImage = data?.session?.referenceImage || request?.referenceImage || request?.photos?.[0] || null;
         const acceptedSession = {
           sessionId: data?.session?.sessionId || `queue-${request.queueId}`,
           bookingId: data?.session?.bookingId || request?.bookingId || null,
@@ -240,6 +241,7 @@ export default function DashboardScreen({ navigation, route }) {
           dropLocation: request?.dropAddress || 'Drop location pending',
           dropLatitude: request?.dropLatitude || null,
           dropLongitude: request?.dropLongitude || null,
+          pickupTime: request?.pickupTime || null,
           timeSlot: request?.pickupTime || 'Time slot pending',
           luggage: Number(request?.bagCount || 1),
           bagWeight: request?.bagWeight || null,
@@ -249,6 +251,8 @@ export default function DashboardScreen({ navigation, route }) {
           departureCity: request?.departureCity || null,
           arrivalCity: request?.arrivalCity || null,
           additionalInfo: request?.additionalInfo || null,
+          referenceImage,
+          photos: request?.photos || [],
           status: 'in-progress',
         };
 
@@ -273,6 +277,7 @@ export default function DashboardScreen({ navigation, route }) {
             pickupAddress: request?.pickupAddress || request?.pickupLocation || 'Pickup location',
             pickupLatitude: request?.pickupLatitude ?? null,
             pickupLongitude: request?.pickupLongitude ?? null,
+            referenceImage,
             status: 'accepted',
           },
         });
@@ -314,22 +319,36 @@ export default function DashboardScreen({ navigation, route }) {
   };
 
   const buildTaskFromSession = (session) => ({
-    id: `session-${session.sessionId}`,
-    sessionId: session.sessionId,
-    bookingId: session.bookingId || null,
-    agentName: session.userName || 'Customer',
-    customerName: session.userName || 'Customer',
-    agentId: `USR${session.userId || ''}`,
-    type: 'Pickup',
-    pickupLocation: session.pickupLocation || 'Pickup location pending',
-    dropLocation: session.dropLocation || 'Drop location pending',
-    timeSlot: session.timeSlot || session.pickupTime || 'Time slot pending',
-    luggage: Number(session.luggage || session.bagCount || 1),
-    status: 'in-progress',
-    phoneNumber: session.userPhone || '',
-    pickupLatitude: session.pickupLatitude,
-    pickupLongitude: session.pickupLongitude,
-  });
+  id: `session-${session.sessionId}`,
+  sessionId: session.sessionId,
+  bookingId: session.bookingId || session.booking_id || null,
+  agentName: session.userName || session.user_name || 'Customer',
+  customerName: session.userName || session.user_name || 'Customer',
+  customerPhone: session.userPhone || session.user_phone || '',
+  agentId: `USR${session.userId || session.user_id || ''}`,
+  type: 'Pickup',
+  pickupLocation: session.pickupAddress || session.pickup_address || session.pickupLocation || 'Pickup location pending',
+  dropLocation: session.dropAddress || session.drop_address || session.dropLocation || 'Drop location pending',
+  pickupLatitude: session.pickupLatitude || session.pickup_latitude || null,
+  pickupLongitude: session.pickupLongitude || session.pickup_longitude || null,
+  dropLatitude: session.dropLatitude || session.drop_latitude || null,
+  dropLongitude: session.dropLongitude || session.drop_longitude || null,
+  timeSlot: session.pickupTime || session.pickup_time || session.timeSlot || 'N/A',
+  pickupTime: session.pickupTime || session.pickup_time || null,
+  luggage: Number(session.bagCount || session.bag_count || session.luggage || 1),
+  bagWeight: session.bagWeight || session.bag_weight || null,
+  airlineName: session.airlineName || session.airline_name || null,
+  flightNumber: session.flightNumber || session.flight_number || null,
+  terminal: session.terminal || null,
+  departureCity: session.departureCity || session.departure_city || null,
+  arrivalCity: session.arrivalCity || session.arrival_city || null,
+  additionalInfo: session.additionalInfo || session.additional_info || null,
+  status: 'in-progress',
+  phoneNumber: session.userPhone || session.user_phone || '',
+  referenceImage: session.referenceImage || session.photos?.[0] || null,
+  customerReferenceImage: session.referenceImage || session.photos?.[0] || null,
+  photos: session.photos || [],
+});
 
   const pingAgentLocation = useCallback(async () => {
     try {
@@ -491,8 +510,9 @@ export default function DashboardScreen({ navigation, route }) {
                     key={session.sessionId}
                     session={session}
                     onViewTask={() => navigation.navigate('TaskDetails', {
-                      task: buildTaskFromSession(session),
-                    })}
+                    task: buildTaskFromSession(session),
+                    bookingId: session.bookingId || null,   // ✅ pass it separately too
+              })}
                   />
                 ))
               ) : filteredTasks.length > 0 ? (
@@ -636,7 +656,7 @@ function InProgressSessionCard({ session, onViewTask }) {
   const routeSummary = [
     session.departureCity ? `From ${session.departureCity}` : null,
     session.arrivalCity ? `To ${session.arrivalCity}` : null,
-    session.timeSlot ? `Pickup ${session.timeSlot}` : null,
+    (session.pickupTime || session.pickup_time || session.timeSlot) ? `Pickup ${session.pickupTime || session.pickup_time || session.timeSlot}` : null,
   ].filter(Boolean).join(' • ');
 
   const luggageSummary = [

@@ -64,14 +64,38 @@ const formatDate = (date) => {
 // Helper function to format times as HH:MM:SS
 const formatTime = (time) => {
   if (!time) return null;
-  if (typeof time === 'string') {
-    // If already in HH:MM:SS format, return as is
-    if (time.match(/^\d{2}:\d{2}:\d{2}$/)) return time;
-    // If in HH:MM format, add :00
-    if (time.match(/^\d{2}:\d{2}$/)) return time + ':00';
-    // Handle other formats
-    return null;
+  const timeText = String(time).trim();
+  if (!timeText) return null;
+
+  // Convert 12-hour format (e.g., "5:30 PM") to 24-hour format
+  if (timeText.includes('AM') || timeText.includes('PM')) {
+    const isPM = timeText.toUpperCase().includes('PM');
+    const cleanTime = timeText.replace(/\s*(AM|PM)/i, '').trim();
+    const parts = cleanTime.split(':');
+    let hour = parseInt(parts[0], 10);
+    const minute = parts[1] ? parseInt(parts[1], 10) : 0;
+    
+    if (isPM && hour !== 12) {
+      hour += 12;
+    } else if (!isPM && hour === 12) {
+      hour = 0;
+    }
+    
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00`;
   }
+
+  // If already in HH:MM:SS format, return as is
+  if (timeText.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
+    const [h, m, s] = timeText.split(':');
+    return `${String(h).padStart(2, '0')}:${m}:${s}`;
+  }
+
+  // If in HH:MM format, add :00
+  if (timeText.match(/^\d{1,2}:\d{2}$/)) {
+    const [h, m] = timeText.split(':');
+    return `${String(h).padStart(2, '0')}:${m}:00`;
+  }
+
   return null;
 };
 

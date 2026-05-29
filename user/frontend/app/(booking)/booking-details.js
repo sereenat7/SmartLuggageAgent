@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
   SafeAreaView, StatusBar, ActivityIndicator, Alert, Platform
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -14,7 +14,7 @@ export default function BookingDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(null);
 
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000'}/api/bookings`;
+  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.159.173.44:5000'}/api/bookings`;
 
   useEffect(() => {
     fetchBookingDetails();
@@ -109,6 +109,21 @@ export default function BookingDetailsScreen() {
     </View>
   );
 
+  const parsePhotos = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value !== 'string') return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_error) {
+      return [];
+    }
+  };
+
+  const bookingPhotos = parsePhotos(booking.photos);
+  const bookingReferenceImage = bookingPhotos[0] || booking.photo_proof || null;
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -176,7 +191,13 @@ export default function BookingDetailsScreen() {
             {renderDetailRow('Number of Bags', `${booking.bag_count || 0}`)}
             {renderDetailRow('Total Weight', `${booking.bag_weight || 0} kg`)}
             {renderDetailRow('Fragile Items', `${booking.is_fragile ? 'Yes' : 'No'}`)}
-            {booking.photo_proof && renderDetailRow('Photo Proof', 'Uploaded')}
+            {bookingReferenceImage && renderDetailRow('Photo Proof', 'Uploaded')}
+            {bookingReferenceImage && (
+              <TouchableOpacity style={styles.photoProofCard} activeOpacity={0.9}>
+                <Image source={{ uri: bookingReferenceImage }} style={styles.photoProofImage} />
+                <Text style={styles.photoProofCaption}>Customer luggage reference</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -333,6 +354,26 @@ const styles = StyleSheet.create({
   },
   detailLabel: { fontSize: 13, color: '#666', fontWeight: '600' },
   detailValue: { fontSize: 13, fontWeight: '700', color: '#1A1C1E' },
+  photoProofCard: {
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  photoProofImage: {
+    width: '100%',
+    height: 180,
+    backgroundColor: '#E5E7EB',
+  },
+  photoProofCaption: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+  },
   timeline: { paddingVertical: 4 },
   timelineItem: { flexDirection: 'row', marginBottom: 4 },
   timelineDot: { width: 14, height: 14, borderRadius: 7, marginTop: 3, marginRight: 12 },

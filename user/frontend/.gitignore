@@ -53,3 +53,5 @@ user/frontend/backend/.env
 node_modules/
 .env
 .expo/
+*.log
+logs/

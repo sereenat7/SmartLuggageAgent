@@ -35,11 +35,11 @@ This is the mobile application for Airline Luggage Agents, built with **React Na
         ```
 
     ### B. Backend API URL
-    1.  Find your computer's local IP address (e.g., `192.168.0.104`).
+    1.  Find your computer's local IP address (e.g., `10.159.173.44`).
     2.  Open `config.js`.
     3.  Update the `API_URL` to point to your backend server:
         ```javascript
-        export const API_URL = 'http://192.168.0.104:4000'; // Replace with your IP
+        export const API_URL = 'http://10.159.173.44:4000'; // Replace with your IP
         ```
 
 ## 🏃 Running the App

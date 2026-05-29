@@ -47,7 +47,7 @@ export default function LoginScreen() {
         : { phone: "+91" + phone, password: password };
 
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000'}/api/auth${endpoint}`,
+        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.159.173.44:5000'}/api/auth${endpoint}`,
         {
           method: "POST",
           headers: {
@@ -106,7 +106,7 @@ export default function LoginScreen() {
       } else {
         Alert.alert("Login Failed", data.message || "Invalid credentials");
       }
-    } catch (err) {
+    } catch (_err) {
       Alert.alert(
         "Network error",
         "Make sure laptop & phone are on same Wi-Fi."
@@ -190,7 +190,7 @@ export default function LoginScreen() {
 
             <TouchableOpacity onPress={() => router.push("/(auth)/register")}>
               <Text style={styles.bottomText}>
-                Don't have an account? <Text style={styles.register}>Register</Text>
+                Do not have an account? <Text style={styles.register}>Register</Text>
               </Text>
             </TouchableOpacity>
           </View>

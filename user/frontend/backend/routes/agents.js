@@ -1,12 +1,12 @@
 const express = require("express");
 const { Buffer } = require("buffer");
 const { latLngToCell, gridDistance } = require("h3-js");
+const Jimp = require("jimp");
 const router = express.Router();
 const db = require("../db");
 const { computeAgentSchedule, PICKUP_PREP_BUFFER_MIN } = require("../utils/agentSchedule");
 
 const H3_RESOLUTION = 8;
-const DEFAULT_CITY_SPEED_KMPH = 28;
 // const PICKUP_PREP_BUFFER_MIN = 5;
 
 
@@ -92,6 +92,54 @@ const serializeDeclinedAgentIds = (ids) => {
     new Set((ids || []).map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0))
   );
   return normalized.length ? normalized.join(',') : null;
+};
+
+const parseBookingPhotos = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+};
+
+const getFirstBookingPhoto = (value) => {
+  const photos = parseBookingPhotos(value);
+  return photos[0] || null;
+};
+
+const dataUrlToBuffer = (value) => {
+  if (!value || typeof value !== 'string') return null;
+  const base64Part = value.includes(',') ? value.split(',')[1] : value;
+  if (!base64Part) return null;
+  return Buffer.from(base64Part, 'base64');
+};
+
+const compareImageHashes = async (referenceImage, candidateImage) => {
+  const referenceBuffer = dataUrlToBuffer(referenceImage);
+  const candidateBuffer = dataUrlToBuffer(candidateImage);
+  if (!referenceBuffer || !candidateBuffer) return { distance: 1, similarity: 0 };
+
+  const [reference, candidate] = await Promise.all([
+    Jimp.Jimp.read(referenceBuffer),
+    Jimp.Jimp.read(candidateBuffer),
+  ]);
+
+  const referenceHash = reference.hash();
+  const candidateHash = candidate.hash();
+
+  let distance = 1;
+  if (typeof Jimp.compareHashes === 'function') {
+    distance = Number(Jimp.compareHashes(referenceHash, candidateHash));
+  } else if (typeof reference.distanceFromHash === 'function') {
+    distance = Number(reference.distanceFromHash(candidateHash));
+  }
+
+  if (!Number.isFinite(distance)) distance = referenceHash === candidateHash ? 0 : 1;
+  return { distance, similarity: Math.max(0, 1 - distance) };
 };
 
 const parseWeightKg = (value) => {
@@ -667,6 +715,7 @@ router.get("/inbox", async (req, res) => {
               u.name, u.phone,
               b.pickup_time, b.departure_date, b.bag_count, b.bag_weight, b.pickup_address,
               b.pickup_latitude, b.pickup_longitude, b.drop_address, b.airline_name, b.flight_number,
+              b.photos,
               b.assignment_due_at, b.agent_eta_minutes, b.agent_leave_by_at, b.pickup_h3_index, b.assigned_agent_id
        FROM agent_queue q
        JOIN users u ON u.id = q.user_id
@@ -725,6 +774,8 @@ router.get("/inbox", async (req, res) => {
       const urgencyMinutes = leaveByAt ? Math.round((leaveByAt.getTime() - Date.now()) / 60000) : null;
       visibleWaiting.push({
         ...row,
+        photos: row.photos || null,
+        referenceImage: getFirstBookingPhoto(row.photos),
         preferred_agent_id: targetAgentId || row.preferred_agent_id,
         declined_agent_ids: serializeDeclinedAgentIds(declinedAgentIds),
         distance_km: distanceKm,
@@ -748,30 +799,20 @@ router.get("/inbox", async (req, res) => {
       if (aDistance !== bDistance) return aDistance - bDistance;
       return new Date(a.requested_at).getTime() - new Date(b.requested_at).getTime();
     });
-    const activeSql = currentAgentId
-      ? `SELECT s.session_id, s.user_id, s.agent_id, s.start_time, a.name AS agent_name, a.phone AS agent_phone,
+    const activeSql = `SELECT s.session_id, s.user_id, s.agent_id, s.booking_id, s.start_time, a.name AS agent_name, a.phone AS agent_phone,
              u.name AS user_name, u.phone AS user_phone,
              b.pickup_address, b.pickup_latitude, b.pickup_longitude,
              b.drop_address, b.drop_latitude, b.drop_longitude,
              b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
-             b.airline_name, b.flight_number, b.assignment_due_at
+             b.airline_name, b.flight_number, b.terminal,
+              b.departure_city, b.arrival_city, b.additional_info,
+              b.is_fragile, b.is_checkin, b.assignment_due_at, b.photos
          FROM agent_sessions s
          JOIN support_agents a ON a.agent_id = s.agent_id
          JOIN users u ON u.id = s.user_id
          LEFT JOIN bookings b ON b.id = s.booking_id
-         WHERE s.status = 'active' AND s.agent_id = ? ORDER BY s.start_time DESC`
-      : `SELECT s.session_id, s.user_id, s.agent_id, s.start_time, a.name AS agent_name, a.phone AS agent_phone,
-             u.name AS user_name, u.phone AS user_phone,
-             b.pickup_address, b.pickup_latitude, b.pickup_longitude,
-             b.drop_address, b.drop_latitude, b.drop_longitude,
-             b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
-             b.airline_name, b.flight_number, b.assignment_due_at
-         FROM agent_sessions s
-         JOIN support_agents a ON a.agent_id = s.agent_id
-         JOIN users u ON u.id = s.user_id
-         LEFT JOIN bookings b ON b.id = s.booking_id
-         WHERE s.status = 'active' ORDER BY s.start_time DESC`;
-    const activeRows = await runQuery(activeSql, currentAgentId ? [currentAgentId] : []);
+         WHERE s.status = 'active' AND s.agent_id = ? ORDER BY s.start_time DESC`;
+    const activeRows = currentAgentId ? await runQuery(activeSql, [currentAgentId]) : [];
     return res.json({
       success: true,
       waiting: visibleWaiting.map((row) => ({
@@ -794,19 +835,30 @@ router.get("/inbox", async (req, res) => {
         targetPickupAt: row.target_pickup_at,
         leaveByAt: row.leave_by_at,
         urgencyMinutes: row.urgency_minutes,
+        photos: row.photos || null,
+        referenceImage: getFirstBookingPhoto(row.photos),
       })),
       activeSessions: activeRows.map((row) => ({
-        sessionId: row.session_id, userId: row.user_id, agentId: row.agent_id,
-        startTime: row.start_time, agentName: row.agent_name, agentPhone: row.agent_phone,
-        userName: row.user_name, userPhone: row.user_phone,
-        pickupAddress: row.pickup_address, pickupLatitude: row.pickup_latitude,
-        pickupLongitude: row.pickup_longitude, dropAddress: row.drop_address,
-        dropLatitude: row.drop_latitude, dropLongitude: row.drop_longitude,
-        pickupTime: row.pickup_time, departureDate: row.departure_date,
-        bagCount: row.bag_count, bagWeight: row.bag_weight,
-        airlineName: row.airline_name, flightNumber: row.flight_number,
-        assignmentDueAt: row.assignment_due_at,
-      })),
+  sessionId: row.session_id, userId: row.user_id, agentId: row.agent_id,
+  bookingId: row.booking_id,
+  startTime: row.start_time, agentName: row.agent_name, agentPhone: row.agent_phone,
+  userName: row.user_name, userPhone: row.user_phone,
+  pickupAddress: row.pickup_address, pickupLatitude: row.pickup_latitude,
+  pickupLongitude: row.pickup_longitude, dropAddress: row.drop_address,
+  dropLatitude: row.drop_latitude, dropLongitude: row.drop_longitude,
+  pickupTime: row.pickup_time, departureDate: row.departure_date,
+  bagCount: row.bag_count, bagWeight: row.bag_weight,
+  airlineName: row.airline_name, flightNumber: row.flight_number,
+  terminal: row.terminal,                          // ✅ add
+  departureCity: row.departure_city,               // ✅ add
+  arrivalCity: row.arrival_city,                   // ✅ add
+  additionalInfo: row.additional_info,             // ✅ add
+  isFragile: row.is_fragile,                       // ✅ add
+  isCheckin: row.is_checkin,                       // ✅ add
+  assignmentDueAt: row.assignment_due_at,
+  photos: row.photos || null,
+  referenceImage: getFirstBookingPhoto(row.photos),
+})),
     });
   } catch (error) {
     console.error("inbox error:", error);
@@ -839,8 +891,8 @@ router.post("/respond-request", async (req, res) => {
     }
     if (!resolvedAgentId) return res.status(404).json({ success: false, message: "Agent not found" });
     const queueRows = await runQuery(
-      `SELECT q.id, q.user_id, q.booking_id, q.preferred_agent_id, q.status, u.name, u.phone,
-              q.declined_agent_ids, b.bag_weight
+          `SELECT q.id, q.user_id, q.booking_id, q.preferred_agent_id, q.status, u.name, u.phone,
+            q.declined_agent_ids, b.bag_weight, b.photos
        FROM agent_queue q
        JOIN users u ON u.id = q.user_id
        LEFT JOIN bookings b ON b.id = q.booking_id
@@ -849,6 +901,7 @@ router.post("/respond-request", async (req, res) => {
     );
     if (!queueRows.length) return res.status(404).json({ success: false, message: "Request not found" });
     const request = queueRows[0];
+    const referenceImage = getFirstBookingPhoto(request.photos);
     if (request.preferred_agent_id && Number(request.preferred_agent_id) !== Number(resolvedAgentId)) {
       return res.status(403).json({
         success: false,
@@ -908,6 +961,12 @@ router.post("/respond-request", async (req, res) => {
         "DELETE FROM agent_queue WHERE id = ? AND status = 'waiting'",
         [queueId]
       );
+      if (request.booking_id) {
+        await runQuery(
+          "UPDATE bookings SET status = 'in-progress', assignment_status = 'accepted' WHERE id = ?",
+          [request.booking_id]
+        );
+      }
       return res.json({
         success: true, action: 'accepted',
         message: 'Request already has an active session',
@@ -915,6 +974,7 @@ router.post("/respond-request", async (req, res) => {
           sessionId: existingSessionRows[0].session_id, bookingId: request.booking_id,
           userId: request.user_id, userName: request.name, userPhone: request.phone,
           agentId: existingSessionRows[0].agent_id,
+          referenceImage,
         },
       });
     }
@@ -931,6 +991,12 @@ router.post("/respond-request", async (req, res) => {
        VALUES (?, ?, ?, 'active', CURRENT_TIMESTAMP)`,
       [request.user_id, request.booking_id, resolvedAgentId]
     );
+    if (request.booking_id) {
+      await runQuery(
+        "UPDATE bookings SET status = 'in-progress', assignment_status = 'accepted' WHERE id = ?",
+        [request.booking_id]
+      );
+    }
     // ✅ FIXED: was WHERE queue_id = ?
     await runQuery(
       "DELETE FROM agent_queue WHERE id = ? AND status = 'waiting'",
@@ -943,11 +1009,90 @@ router.post("/respond-request", async (req, res) => {
         sessionId: sessionResult.insertId, bookingId: request.booking_id,
         userId: request.user_id, userName: request.name, userPhone: request.phone,
         agentId: resolvedAgentId,
+        referenceImage,
       },
     });
   } catch (error) {
     console.error("respond-request error:", error);
     return res.status(500).json({ success: false, message: "Failed to update request" });
+  }
+});
+
+router.post("/verify-luggage-match", async (req, res) => {
+  const { bookingId, agentImage } = req.body || {};
+  if (!bookingId || !agentImage) {
+    return res.status(400).json({ success: false, message: "bookingId and agentImage are required" });
+  }
+
+  try {
+    const rows = await runQuery("SELECT photos FROM bookings WHERE id = ? LIMIT 1", [bookingId]);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    const referenceImage = getFirstBookingPhoto(rows[0].photos);
+    if (!referenceImage) {
+      return res.status(404).json({ success: false, message: "Customer reference photo not found" });
+    }
+
+    const { distance, similarity } = await compareImageHashes(referenceImage, agentImage);
+    const matched = similarity >= 0.82;
+
+    return res.json({
+      success: true,
+      matched,
+      similarity: Number(similarity.toFixed(3)),
+      distance: Number(distance.toFixed(3)),
+      message: matched ? 'Reference matched automatically' : 'Reference photo does not match',
+    });
+  } catch (error) {
+    console.error('verify-luggage-match error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to verify luggage image' });
+  }
+});
+
+router.get("/booking-details/:bookingId", async (req, res) => {
+  const { bookingId } = req.params;
+
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: "bookingId is required" });
+  }
+
+  try {
+    const bookingRows = await runQuery("SELECT * FROM bookings WHERE id = ? LIMIT 1", [bookingId]);
+    if (!bookingRows.length) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    const booking = bookingRows[0];
+    const locationRows = await runQuery(
+      "SELECT * FROM booking_locations WHERE booking_id = ? ORDER BY id ASC",
+      [bookingId]
+    );
+
+    const locations = locationRows.map((row) => ({
+      ...row,
+      locationType: row.location_type,
+      fullAddress: row.full_address || row.address || null,
+      contactName: row.contact_person_name || null,
+      contactPhone: row.contact_person_phone || null,
+      notes: row.additional_notes || null,
+    }));
+
+    const pickupLocation = locations.find((row) => String(row.location_type).toLowerCase() === 'pickup') || null;
+    const dropLocation = locations.find((row) => String(row.location_type).toLowerCase() === 'drop') || null;
+
+    return res.json({
+      success: true,
+      booking,
+      locations,
+      pickupLocation,
+      dropLocation,
+      photos: parseBookingPhotos(booking.photos),
+    });
+  } catch (error) {
+    console.error('booking-details error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to load booking details' });
   }
 });
 

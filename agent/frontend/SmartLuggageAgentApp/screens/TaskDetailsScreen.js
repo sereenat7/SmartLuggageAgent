@@ -19,13 +19,45 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '../constants/colors';
+import { uriToDataUrl } from '../utils/imageHelpers';
+import { USER_API_URL } from '../config';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_SIZE = (SCREEN_WIDTH - 60) / 3;
 
 export default function TaskDetailsScreen({ navigation, route }) {
-  const { task } = route.params;
-  const referenceImage = task.referenceImage || task.customerReferenceImage || task.luggageReferenceImage || null;
+  const task = route?.params?.task || {};
+  const bookingId = route?.params?.bookingId || task.bookingId || null;
+  console.log('DEBUG: TaskDetailsScreen task object:', task);
+  console.log('DEBUG: TaskDetailsScreen bookingId:', bookingId);
+  console.log('DEBUG: TaskDetailsScreen task.pickupTime:', task.pickupTime);
+  console.log('DEBUG: TaskDetailsScreen task.timeSlot:', task.timeSlot);
+  console.log('DEBUG: TaskDetailsScreen task.photos:', task.photos);
+  console.log('DEBUG: TaskDetailsScreen task.referenceImage:', task.referenceImage);
+  const normalizePhotoList = (value) => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value;
+    if (typeof value !== 'string') return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_error) {
+      return [];
+    }
+  };
+  const [bookingDetails, setBookingDetails] = useState(null);
+  const [isLoadingBookingDetails, setIsLoadingBookingDetails] = useState(Boolean(bookingId));
+  const [bookingDetailsError, setBookingDetailsError] = useState('');
+  const booking = bookingDetails?.booking || {};
+  const bookingLocations = bookingDetails?.locations || [];
+  const pickupLocation = bookingDetails?.pickupLocation || bookingLocations.find((item) => String(item.location_type).toLowerCase() === 'pickup') || null;
+  const dropLocation = bookingDetails?.dropLocation || bookingLocations.find((item) => String(item.location_type).toLowerCase() === 'drop') || null;
+  const bookingPhotos = normalizePhotoList(bookingDetails?.photos || booking.photos || task.photos || task.referenceImage);
+  const displayedCustomerName = booking.username || task.customerName || task.agentName || 'Customer';
+  const displayedCustomerPhone = booking.phone || task.customerPhone || task.phoneNumber || '';
+  const referenceImage = bookingPhotos[0] || booking.referenceImage || booking.photo_proof || task.referenceImage || task.customerReferenceImage || task.luggageReferenceImage || task.photos?.[0] || null;
+  console.log('DEBUG: bookingPhotos:', bookingPhotos);
+  console.log('DEBUG: referenceImage:', referenceImage);
   const expectedOtp = String(task.deliveryOtp || task.otp || '1234');
   const otpLength = expectedOtp.length === 6 ? 6 : 4;
   const [weight, setWeight] = useState(task.weight ? String(task.weight) : '');
@@ -33,6 +65,8 @@ export default function TaskDetailsScreen({ navigation, route }) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [luggagePhotos, setLuggagePhotos] = useState([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isVerifyingReference, setIsVerifyingReference] = useState(false);
+  const [isReferenceMatched, setIsReferenceMatched] = useState(false);
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [previewImageUri, setPreviewImageUri] = useState('');
   const [otp, setOtp] = useState(Array(otpLength).fill(''));
@@ -43,6 +77,21 @@ export default function TaskDetailsScreen({ navigation, route }) {
   const [resendTimer, setResendTimer] = useState(30);
   const otpInputRefs = useRef([]);
 
+  const agentComparisonImage = luggagePhotos[0]?.uri || null;
+
+  const renderDetailRow = (label, value) => (
+    <View style={styles.detailRow}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value ? String(value) : 'N/A'}</Text>
+    </View>
+  );
+
+  const renderPhotoPreview = (uri, key) => (
+    <TouchableOpacity key={key} style={styles.photoThumb} activeOpacity={0.9} onPress={() => openImagePreview(uri)}>
+      <Image source={{ uri }} style={styles.photoThumbImage} />
+    </TouchableOpacity>
+  );
+
   useEffect(() => {
     if (resendTimer <= 0) return undefined;
     const timer = setInterval(() => {
@@ -51,8 +100,109 @@ export default function TaskDetailsScreen({ navigation, route }) {
     return () => clearInterval(timer);
   }, [resendTimer]);
 
+  useEffect(() => {
+    setIsReferenceMatched(false);
+  }, [referenceImage, agentComparisonImage]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!bookingId) {
+      console.log('DEBUG: No bookingId, skipping fetch');
+      setIsLoadingBookingDetails(false);
+      return undefined;
+    }
+
+    const loadBookingDetails = async () => {
+      console.log('DEBUG: Fetching booking details for bookingId:', bookingId);
+      setIsLoadingBookingDetails(true);
+      setBookingDetailsError('');
+
+      try {
+        const url = `${USER_API_URL}/api/agents/booking-details/${bookingId}`;
+        console.log('DEBUG: Fetch URL:', url);
+        const response = await fetch(url);
+        const data = await response.json().catch(() => ({}));
+        console.log('DEBUG: Booking details response:', data);
+
+        if (!cancelled && response.ok && data?.success) {
+          console.log('DEBUG: Booking details loaded successfully');
+          setBookingDetails(data);
+        } else if (!cancelled) {
+          console.log('DEBUG: Booking details error:', data?.message);
+          setBookingDetailsError(data?.message || 'Could not load booking details.');
+        }
+      } catch (error) {
+        console.log('DEBUG: Booking details fetch error:', error);
+        if (!cancelled) {
+          setBookingDetailsError(error.message || 'Could not load booking details.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingBookingDetails(false);
+        }
+      }
+    };
+
+    loadBookingDetails();
+    return () => { cancelled = true; };
+  }, [bookingId]);
+
   const handleCallCustomer = () => {
-    Alert.alert('Call Customer', `Calling ${task.agentName} at ${task.phoneNumber}`);
+    Alert.alert('Call Customer', `Calling ${displayedCustomerName}${displayedCustomerPhone ? ` at ${displayedCustomerPhone}` : ''}`);
+  };
+
+  const verifyReferenceMatch = async (agentImage) => {
+    if (!bookingId || !referenceImage || !agentImage) return false;
+
+    try {
+      const response = await fetch(`${USER_API_URL}/api/agents/verify-luggage-match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId,
+          agentImage,
+        }),
+      });
+
+      const result = await response.json();
+      if (response.ok && result.success) {
+        const matched = Boolean(result.matched);
+        setIsReferenceMatched(matched);
+        return matched;
+      }
+
+      setIsReferenceMatched(false);
+      return false;
+    } catch (error) {
+      console.log('Reference match failed:', error.message);
+      setIsReferenceMatched(false);
+      return false;
+    }
+  };
+
+  const addAgentPhoto = async (uri) => {
+    setIsUploadingPhoto(true);
+    setIsReferenceMatched(false);
+
+    try {
+      const dataUrl = await uriToDataUrl(uri);
+      if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:')) {
+        Alert.alert(
+          'Photo upload failed',
+          'The image could not be prepared for matching on this device. Please try another photo.'
+        );
+        return;
+      }
+
+      const photoId = Date.now();
+      setLuggagePhotos(prev => [...prev, { uri: dataUrl, id: photoId }]);
+      setIsVerifyingReference(true);
+      await verifyReferenceMatch(dataUrl);
+    } finally {
+      setIsVerifyingReference(false);
+      setIsUploadingPhoto(false);
+    }
   };
 
   const handleTakePhoto = async () => {
@@ -69,12 +219,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
     });
 
     if (!result.canceled) {
-      setIsUploadingPhoto(true);
-      // Simulate upload delay
-      setTimeout(() => {
-        setLuggagePhotos(prev => [...prev, { uri: result.assets[0].uri, id: Date.now() }]);
-        setIsUploadingPhoto(false);
-      }, 1000);
+      await addAgentPhoto(result.assets[0].uri);
     }
   };
 
@@ -87,11 +232,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
     });
 
     if (!result.canceled) {
-      setIsUploadingPhoto(true);
-      setTimeout(() => {
-        setLuggagePhotos(prev => [...prev, { uri: result.assets[0].uri, id: Date.now() }]);
-        setIsUploadingPhoto(false);
-      }, 1000);
+      await addAgentPhoto(result.assets[0].uri);
     }
   };
 
@@ -187,6 +328,24 @@ export default function TaskDetailsScreen({ navigation, route }) {
     Alert.alert('Success', `Status updated to ${newStatus}`);
   };
 
+  const pickupTimeValue = booking.pickup_time || task.pickupTime || task.timeSlot || 'N/A';
+
+  const bookingSummary = [
+    booking.airline_name || task.airlineName ? `Airline: ${booking.airline_name || task.airlineName}` : null,
+    booking.flight_number || task.flightNumber ? `Flight: ${booking.flight_number || task.flightNumber}` : null,
+    booking.terminal || task.terminal ? `Terminal: ${booking.terminal || task.terminal}` : null,
+  ].filter(Boolean).join(' • ');
+
+  const luggageSummary = [
+    booking.bag_count ?? task.luggage ? `${booking.bag_count ?? task.luggage} bag${Number(booking.bag_count ?? task.luggage) === 1 ? '' : 's'}` : null,
+    booking.bag_weight || task.weight ? `Weight: ${booking.bag_weight || task.weight}` : null,
+    booking.is_fragile || task.isFragile ? 'Fragile' : null,
+    booking.is_checkin || task.isCheckin ? 'Check-in' : null,
+    booking.pincode ? `Pincode: ${booking.pincode}` : null,
+  ].filter(Boolean).join(' • ');
+
+  const isLoadingDetails = isLoadingBookingDetails && !booking.id;
+
   const getStatusColor = (st) => {
     if (st === 'assigned') return '#FF9100';
     if (st === 'in-progress') return '#2196F3';
@@ -204,7 +363,14 @@ export default function TaskDetailsScreen({ navigation, route }) {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            // Navigate back to Dashboard (In Progress view)
+            if (navigation.canGoBack && navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Dashboard', { activeTab: 'Assigned' });
+            }
+          }}
           style={styles.backButton}
         >
           <Text style={styles.backButtonText}>{'<'} </Text>
@@ -212,6 +378,13 @@ export default function TaskDetailsScreen({ navigation, route }) {
         <Text style={styles.headerTitle}>Task Details</Text>
         <View style={styles.spacer} />
       </View>
+
+      {bookingDetailsError ? (
+        <View style={styles.inlineNotice}>
+          <Ionicons name="warning-outline" size={16} color="#B45309" />
+          <Text style={styles.inlineNoticeText}>{bookingDetailsError}</Text>
+        </View>
+      ) : null}
 
       <KeyboardAvoidingView
         style={styles.keyboardContainer}
@@ -228,12 +401,12 @@ export default function TaskDetailsScreen({ navigation, route }) {
               ]}
             >
               <Text style={styles.avatarText}>
-                {task.agentName.split(' ').map(n => n[0]).join('')}
+                {displayedCustomerName.split(' ').map(n => n[0]).join('')}
               </Text>
             </View>
             <View style={styles.customerInfo}>
-              <Text style={styles.customerName}>{task.agentName}</Text>
-              <Text style={styles.customerId}>{task.agentId}</Text>
+              <Text style={styles.customerName}>{displayedCustomerName}</Text>
+              <Text style={styles.customerId}>{displayedCustomerPhone || task.agentId || `Booking #${bookingId || 'N/A'}`}</Text>
             </View>
             <View style={[styles.typeBadge, { backgroundColor: getTaskTypeColor(task.type) }]}>
               <Text style={styles.typeText}>{task.type}</Text>
@@ -245,102 +418,84 @@ export default function TaskDetailsScreen({ navigation, route }) {
             onPress={handleCallCustomer}
           >
             <Text style={styles.callIcon}>Call</Text>
-            <Text style={styles.callText}>Call Customer</Text>
+            <Text style={styles.callText}>Customer</Text>
           </TouchableOpacity>
         </View>
 
+
         {/* Task Information Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Task Information</Text>
+<View style={styles.card}>
+  <Text style={styles.cardTitle}>Task Information</Text>
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoItemWithIcon}>
-              <View style={styles.infoIconWrap}>
-                <Ionicons name="time-outline" size={17} color={Colors.primary} />
-              </View>
-              <View>
-                <Text style={styles.infoLabel}>Time Slot</Text>
-                <Text style={styles.infoValue}>{task.timeSlot}</Text>
-              </View>
-            </View>
-          </View>
+  <View style={styles.infoRow}>
+    <View style={styles.infoItemWithIcon}>
+      <View style={styles.infoIconWrap}>
+        <Ionicons name="receipt-outline" size={17} color={Colors.primary} />
+      </View>
+      <View>
+        <Text style={styles.infoLabel}>Booking ID</Text>
+        <Text style={styles.infoValue}>{booking.id || task.bookingId || bookingId || 'N/A'}</Text>
+      </View>
+    </View>
+  </View>
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoItemWithIcon}>
-              <View style={styles.infoIconWrap}>
-                <Ionicons name="briefcase-outline" size={17} color={Colors.primary} />
-              </View>
-              <View>
-                <Text style={styles.infoLabel}>Luggage</Text>
-                <Text style={styles.infoValue}>{task.luggage} bags</Text>
-              </View>
-            </View>
-          </View>
+  <View style={styles.infoRow}>
+    <View style={styles.infoItemWithIcon}>
+      <View style={styles.infoIconWrap}>
+        <Ionicons name="time-outline" size={17} color={Colors.primary} />
+      </View>
+      <View>
+        <Text style={styles.infoLabel}>Time Slot</Text>
+        <Text style={styles.infoValue}>{pickupTimeValue}</Text>
+      </View>
+    </View>
+  </View>
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoItemWithIcon}>
-              <View style={styles.infoIconWrap}>
-                <Ionicons name="navigate-circle-outline" size={17} color={Colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.infoLabel}>Pickup Address</Text>
-                <Text style={styles.infoValue}>{task.pickupLocation}</Text>
-              </View>
-            </View>
-          </View>
+  <View style={styles.infoRow}>
+    <View style={styles.infoItemWithIcon}>
+      <View style={styles.infoIconWrap}>
+        <Ionicons name="briefcase-outline" size={17} color={Colors.primary} />
+      </View>
+      <View>
+        <Text style={styles.infoLabel}>Luggage</Text>
+        <Text style={styles.infoValue}>{task.luggage} bags</Text>
+      </View>
+    </View>
+  </View>
 
-          <View style={styles.infoRow}>
-            <View style={styles.infoItemWithIcon}>
-              <View style={styles.infoIconWrap}>
-                <Ionicons name="location-outline" size={17} color={Colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.infoLabel}>Drop Address</Text>
-                <Text style={styles.infoValue}>{task.dropLocation}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+  <View style={styles.infoRow}>
+    <View style={styles.infoItemWithIcon}>
+      <View style={styles.infoIconWrap}>
+        <Ionicons name="navigate-circle-outline" size={17} color={Colors.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.infoLabel}>Pickup Address</Text>
+        <Text style={styles.infoValue}>{pickupLocation?.fullAddress || booking.pickup_address || task.pickupLocation}</Text>
+      </View>
+    </View>
+  </View>
 
-        {/* Update Delivery Status */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Update Delivery Status</Text>
+  <View style={styles.infoRow}>
+    <View style={styles.infoItemWithIcon}>
+      <View style={styles.infoIconWrap}>
+        <Ionicons name="location-outline" size={17} color={Colors.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.infoLabel}>Drop Address</Text>
+        <Text style={styles.infoValue}>{dropLocation?.fullAddress || booking.drop_address || task.dropLocation}</Text>
+      </View>
+    </View>
+  </View>
 
-          <View style={styles.statusSelector}>
-            <Text style={styles.statusLabel}>Select Status</Text>
-            <TouchableOpacity
-              style={styles.statusDropdown}
-              onPress={() => setShowStatusDropdown(!showStatusDropdown)}
-            >
-              <Text style={[styles.statusDropdownText, { color: getStatusColor(status) }]}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </Text>
-              <Text style={styles.dropdownIcon}>{showStatusDropdown ? '^' : 'v'}</Text>
-            </TouchableOpacity>
-
-            {showStatusDropdown && (
-              <View style={styles.dropdownMenu}>
-                {['assigned', 'in-progress', 'completed'].map(st => (
-                  <TouchableOpacity
-                    key={st}
-                    style={styles.dropdownItem}
-                    onPress={() => handleUpdateStatus(st)}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        { color: getStatusColor(st) },
-                      ]}
-                    >
-                      {st.charAt(0).toUpperCase() + st.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        </View>
-
+  {(pickupLocation || dropLocation) && (
+    <>
+      {pickupLocation ? renderDetailRow('Pickup Contact', pickupLocation.contactName || booking.pickup_contact_name || task.customerName) : null}
+      {pickupLocation ? renderDetailRow('Pickup Notes', pickupLocation.notes || booking.pickup_notes || booking.pickup_address) : null}
+      {dropLocation ? renderDetailRow('Drop Contact', dropLocation.contactName || booking.drop_contact_name) : null}
+      {dropLocation ? renderDetailRow('Drop Notes', dropLocation.notes || booking.drop_notes) : null}
+    </>
+  )}
+</View>
         {/* Luggage Weight */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Luggage Weight</Text>
@@ -373,7 +528,9 @@ export default function TaskDetailsScreen({ navigation, route }) {
               <Text style={styles.referenceSubtitle}>Photo uploaded by customer for verification</Text>
             </View>
             <View style={styles.referenceStatusChip}>
-              <Text style={styles.referenceStatusText}>{referenceImage ? 'Available' : 'Missing'}</Text>
+              <Text style={[styles.referenceStatusText, isReferenceMatched && styles.referenceStatusTextMatched]}>
+                {isReferenceMatched ? 'Matched' : referenceImage ? 'Available' : 'Missing'}
+              </Text>
             </View>
           </View>
 
@@ -396,7 +553,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
             <Text style={styles.referenceHint}>Match this before pickup</Text>
           </View>
 
-          {referenceImage && luggagePhotos.length > 0 && (
+          {referenceImage && agentComparisonImage && (
             <View style={styles.compareRow}>
               <View style={styles.comparePane}>
                 <Text style={styles.compareLabel}>Customer</Text>
@@ -404,7 +561,23 @@ export default function TaskDetailsScreen({ navigation, route }) {
               </View>
               <View style={styles.comparePane}>
                 <Text style={styles.compareLabel}>Agent</Text>
-                <Image source={{ uri: luggagePhotos[0].uri }} style={styles.compareImage} />
+                <Image source={{ uri: agentComparisonImage }} style={styles.compareImage} />
+              </View>
+            </View>
+          )}
+
+          {isReferenceMatched && (
+            <View style={styles.matchSuccessBox}>
+              <Ionicons name="checkmark-circle" size={16} color={Colors.success} />
+              <Text style={styles.matchSuccessText}>Reference matched</Text>
+            </View>
+          )}
+
+          {bookingPhotos.length > 0 && (
+            <View style={styles.bookingPhotosBlock}>
+              <Text style={styles.photoDescription}>Photos uploaded during booking</Text>
+              <View style={styles.bookingPhotoStrip}>
+                {bookingPhotos.map((uri, index) => renderPhotoPreview(uri, `booking-photo-${index}`))}
               </View>
             </View>
           )}
@@ -437,7 +610,9 @@ export default function TaskDetailsScreen({ navigation, route }) {
           {isUploadingPhoto && (
             <View style={styles.uploadingContainer}>
               <ActivityIndicator size="small" color={Colors.primary} />
-              <Text style={styles.uploadingText}>Uploading photo...</Text>
+              <Text style={styles.uploadingText}>
+                {isVerifyingReference ? 'Verifying match...' : 'Uploading photo...'}
+              </Text>
             </View>
           )}
 
@@ -631,6 +806,56 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+  },
+  inlineNotice: {
+    marginHorizontal: 14,
+    marginTop: 12,
+    marginBottom: -2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inlineNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#9A3412',
+    fontWeight: '600',
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  loadingText: {
+    marginLeft: 10,
+    color: Colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  detailRow: {
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  detailLabel: {
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#64748B',
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  detailValue: {
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontWeight: '600',
+    lineHeight: 20,
   },
   customerHeader: {
     flexDirection: 'row',
@@ -856,6 +1081,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#475569',
   },
+  referenceStatusTextMatched: {
+    color: Colors.success,
+  },
   referenceImageCard: {
     borderRadius: 12,
     overflow: 'hidden',
@@ -925,6 +1153,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: Colors.backgroundSecondary,
   },
+  matchSuccessBox: {
+    marginTop: 12,
+    backgroundColor: Colors.successLight,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  matchSuccessText: {
+    color: Colors.success,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   successCard: {
     backgroundColor: Colors.successLight,
     borderRadius: 12,
@@ -956,6 +1199,28 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginBottom: 14,
+  },
+  bookingPhotosBlock: {
+    marginTop: 12,
+  },
+  bookingPhotoStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 10,
+  },
+  photoThumb: {
+    width: PHOTO_SIZE,
+    height: PHOTO_SIZE,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#E2E8F0',
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  photoThumbImage: {
+    width: '100%',
+    height: '100%',
   },
   photoItem: {
     width: PHOTO_SIZE,
