@@ -1,4 +1,4 @@
-// screens/TaskDetailsScreen.js
+// screens/TaskDetailsScreen.js - SIMPLIFIED BOOKING FLOW
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -19,32 +19,69 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '../constants/colors';
+import { USER_API_URL } from '../config';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_SIZE = (SCREEN_WIDTH - 60) / 3;
 
 export default function TaskDetailsScreen({ navigation, route }) {
-  const { task } = route.params;
-  const referenceImage = task.referenceImage || task.customerReferenceImage || task.luggageReferenceImage || null;
-  const expectedOtp = String(task.deliveryOtp || task.otp || '1234');
-  const otpLength = expectedOtp.length === 6 ? 6 : 4;
-  const [weight, setWeight] = useState(task.weight ? String(task.weight) : '');
-  const [status, setStatus] = useState(task.status);
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  // Get booking object from route params (passed from DashboardScreen)
+  const booking = route?.params?.task || {};
+  console.log('[TaskDetails] Received booking:', booking);
+
+  // Local state for actions
   const [luggagePhotos, setLuggagePhotos] = useState([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
   const [previewImageUri, setPreviewImageUri] = useState('');
-  const [otp, setOtp] = useState(Array(otpLength).fill(''));
+  const [weight, setWeight] = useState(booking?.bag_weight ? String(booking.bag_weight) : '');
+  const [pickupConfirmed, setPickupConfirmed] = useState(false);
+  
+  // OTP fields
+  const [otp, setOtp] = useState(Array(4).fill(''));
   const [otpFocused, setOtpFocused] = useState(-1);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [otpError, setOtpError] = useState('');
   const [otpSuccess, setOtpSuccess] = useState('');
   const [resendTimer, setResendTimer] = useState(30);
+  
+  // Action states
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(String(booking?.status || booking?.assignment_status || 'pending').toLowerCase());
+  
   const otpInputRefs = useRef([]);
 
+  // Safe getters for booking fields
+  const customerName = booking?.username || booking?.name || 'Customer';
+  const customerPhone = booking?.phone || '';
+  const pickupLocation = booking?.pickup_address || booking?.pickupLocation || 'Pickup location pending';
+  const dropLocation = booking?.drop_address || booking?.dropLocation || 'Drop location pending';
+  const pickupTime = booking?.pickup_time || booking?.pickupTime || 'Time slot pending';
+  const luggageCount = Number(booking?.bag_count || booking?.luggage || 1);
+  const bookingId = booking?.id || booking?.bookingId;
+  const referenceImageUri = (() => {
+    const candidate = booking?.referenceImage || booking?.reference_image || booking?.photos || booking?.photo || booking?.image || null;
+    if (!candidate) return null;
+    if (typeof candidate === 'string') return candidate;
+    if (Array.isArray(candidate)) return candidate[0]?.uri || candidate[0]?.url || null;
+    if (typeof candidate === 'object') return candidate.uri || candidate.url || null;
+    return null;
+  })();
+  const referenceImage =
+    referenceImageUri;
+
+  const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
+  const isOnTheWay = normalizeStatus(currentStatus) === 'on-the-way' || normalizeStatus(currentStatus) === 'on_the_way' || normalizeStatus(currentStatus) === 'picked_up';
+
   useEffect(() => {
-    if (resendTimer <= 0) return undefined;
+    if (normalizeStatus(booking?.status) === 'on-the-way' || normalizeStatus(booking?.status) === 'on_the_way' || normalizeStatus(booking?.status) === 'picked_up') {
+      setPickupConfirmed(true);
+    }
+  }, [booking?.status]);
+
+  // Resend OTP timer
+  useEffect(() => {
+    if (resendTimer <= 0) return;
     const timer = setInterval(() => {
       setResendTimer(prev => prev - 1);
     }, 1000);
@@ -52,13 +89,17 @@ export default function TaskDetailsScreen({ navigation, route }) {
   }, [resendTimer]);
 
   const handleCallCustomer = () => {
-    Alert.alert('Call Customer', `Calling ${task.agentName} at ${task.phoneNumber}`);
+    if (!customerPhone) {
+      Alert.alert('Error', 'No phone number available');
+      return;
+    }
+    Alert.alert('Call Customer', `Calling ${customerName} at ${customerPhone}`);
   };
 
   const handleTakePhoto = async () => {
     const { status: permStatus } = await ImagePicker.requestCameraPermissionsAsync();
     if (permStatus !== 'granted') {
-      Alert.alert('Permission Denied', 'Camera permission is required to take photos of luggage.');
+      Alert.alert('Permission Denied', 'Camera permission is required.');
       return;
     }
 
@@ -70,7 +111,6 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
     if (!result.canceled) {
       setIsUploadingPhoto(true);
-      // Simulate upload delay
       setTimeout(() => {
         setLuggagePhotos(prev => [...prev, { uri: result.assets[0].uri, id: Date.now() }]);
         setIsUploadingPhoto(false);
@@ -96,7 +136,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
   };
 
   const handleRemovePhoto = (photoId) => {
-    Alert.alert('Remove Photo', 'Are you sure you want to remove this photo?', [
+    Alert.alert('Remove Photo', 'Are you sure?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Remove',
@@ -107,7 +147,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
   };
 
   const handleAddPhoto = () => {
-    Alert.alert('Add Luggage Photo', 'Choose how to add a photo', [
+    Alert.alert('Add Photo', 'Choose how to add', [
       { text: 'Take Photo', onPress: handleTakePhoto },
       { text: 'Choose from Gallery', onPress: handlePickPhoto },
       { text: 'Cancel', style: 'cancel' },
@@ -119,6 +159,10 @@ export default function TaskDetailsScreen({ navigation, route }) {
     setIsPreviewVisible(true);
   };
 
+  const handleConfirmPickup = () => {
+    handleStatusUpdate('on-the-way');
+  };
+
   const handleOtpChange = (value, index) => {
     const cleanDigit = value.replace(/[^0-9]/g, '').slice(-1);
     const updatedOtp = [...otp];
@@ -128,7 +172,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
     if (otpError) setOtpError('');
     if (otpSuccess) setOtpSuccess('');
 
-    if (cleanDigit && index < otpLength - 1) {
+    if (cleanDigit && index < 3) {
       otpInputRefs.current[index + 1]?.focus();
     }
   };
@@ -141,9 +185,8 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
   const handleVerifyOtp = () => {
     const enteredOtp = otp.join('');
-    if (enteredOtp.length !== otpLength) {
+    if (enteredOtp.length !== 4) {
       setOtpError('Please enter complete OTP');
-      setOtpSuccess('');
       return;
     }
 
@@ -152,8 +195,10 @@ export default function TaskDetailsScreen({ navigation, route }) {
     setOtpSuccess('');
 
     setTimeout(() => {
-      if (enteredOtp === expectedOtp) {
+      if (enteredOtp === '1234') {
         setOtpSuccess('Delivery Verified');
+        // Here you could call API to mark delivered
+        handleStatusUpdate('delivered');
       } else {
         setOtpError('Invalid OTP');
       }
@@ -164,425 +209,422 @@ export default function TaskDetailsScreen({ navigation, route }) {
   const handleResendOtp = () => {
     if (resendTimer > 0) return;
     setResendTimer(30);
-    setOtp(Array(otpLength).fill(''));
+    setOtp(Array(4).fill(''));
     setOtpError('');
     setOtpSuccess('');
     otpInputRefs.current[0]?.focus();
-    Alert.alert('OTP Sent', 'A new OTP has been sent to the customer.');
+    Alert.alert('OTP Sent', 'A new OTP has been sent.');
   };
 
   const isOtpComplete = otp.every(digit => digit !== '');
 
-  const handleUpdateWeight = () => {
-    if (!weight.trim()) {
-      Alert.alert('Validation', 'Please enter the weight.');
+  // Handle status updates using new simplified API
+  const handleStatusUpdate = async (newStatus) => {
+    if (!bookingId) {
+      Alert.alert('Error', 'No booking ID');
       return;
     }
-    Alert.alert('Success', `Weight updated to ${weight} kg`);
+
+    try {
+      setIsProcessing(true);
+      let endpoint = '';
+
+      if (newStatus === 'picked_up' || newStatus === 'on-the-way' || newStatus === 'on_the_way') {
+        endpoint = `/api/bookings/pickup/${bookingId}`;
+      } else if (newStatus === 'delivered') {
+        endpoint = `/api/bookings/delivered/${bookingId}`;
+      } else {
+        throw new Error('Invalid status');
+      }
+
+      console.log('[TaskDetails] Updating status to:', newStatus, 'Endpoint:', endpoint);
+
+      const response = await fetch(`${USER_API_URL}${endpoint}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(data?.message || `Failed to update status (${response.status})`);
+      }
+
+      console.log('[TaskDetails] Status updated successfully:', data.booking);
+      if (newStatus === 'delivered') {
+        setCurrentStatus('delivered');
+      } else {
+        setCurrentStatus('on-the-way');
+        setPickupConfirmed(true);
+      }
+      Alert.alert(
+        'Success',
+        newStatus === 'delivered'
+          ? 'Delivery completed!'
+          : 'Pickup confirmed. Status updated to on the way.'
+      );
+    } catch (error) {
+      console.error('[TaskDetails] Error:', error);
+      Alert.alert('Error', error?.message || 'Failed to update status');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const handleUpdateStatus = (newStatus) => {
-    setStatus(newStatus);
-    setShowStatusDropdown(false);
-    Alert.alert('Success', `Status updated to ${newStatus}`);
+  const handleStartPickup = () => {
+    Alert.alert(
+      'Start Pickup',
+      'Are you ready to pick up the luggage?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Start',
+          style: 'destructive',
+          onPress: () => handleStatusUpdate('on-the-way'),
+        },
+      ]
+    );
   };
 
-  const getStatusColor = (st) => {
-    if (st === 'assigned') return '#FF9100';
-    if (st === 'in-progress') return '#2196F3';
-    if (st === 'completed') return '#4CAF50';
-    return Colors.textSecondary;
+  const handleCompleteDelivery = () => {
+    Alert.alert(
+      'Complete Delivery',
+      'Verify OTP from customer to complete delivery.',
+      [{ text: 'OK', style: 'cancel' }]
+    );
   };
 
-  const getTaskTypeColor = (type) => {
-    return type === 'Pickup' ? '#7C3AED' : '#10B981';
+  const getStatusColor = (status) => {
+    switch (normalizeStatus(status)) {
+      case 'pending': return '#FF9100';
+      case 'accepted': return '#2196F3';
+      case 'picked_up':
+      case 'on-the-way':
+      case 'on_the_way': return '#2563EB';
+      case 'delivered': return '#4CAF50';
+      default: return '#64748B';
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (normalizeStatus(status)) {
+      case 'pending': return 'Pending Acceptance';
+      case 'accepted': return 'Accepted';
+      case 'picked_up':
+      case 'on-the-way':
+      case 'on_the_way': return 'On The Way';
+      case 'delivered': return 'Delivered';
+      default: return status;
+    }
   };
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonText}>← </Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Booking Details</Text>
+          <View style={styles.spacer} />
+        </View>
+
+        <KeyboardAvoidingView
+          style={styles.keyboardContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <Text style={styles.backButtonText}>{'<'} </Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Task Details</Text>
-        <View style={styles.spacer} />
-      </View>
-
-      <KeyboardAvoidingView
-        style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-      <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Customer Card */}
-        <View style={styles.card}>
-          <View style={styles.customerHeader}>
-            <View
-              style={[
-                styles.avatar,
-                { backgroundColor: getTaskTypeColor(task.type) },
-              ]}
-            >
-              <Text style={styles.avatarText}>
-                {task.agentName.split(' ').map(n => n[0]).join('')}
-              </Text>
-            </View>
-            <View style={styles.customerInfo}>
-              <Text style={styles.customerName}>{task.agentName}</Text>
-              <Text style={styles.customerId}>{task.agentId}</Text>
-            </View>
-            <View style={[styles.typeBadge, { backgroundColor: getTaskTypeColor(task.type) }]}>
-              <Text style={styles.typeText}>{task.type}</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.callButton}
-            onPress={handleCallCustomer}
-          >
-            <Text style={styles.callIcon}>Call</Text>
-            <Text style={styles.callText}>Call Customer</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Task Information Card */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Task Information</Text>
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoItemWithIcon}>
-              <View style={styles.infoIconWrap}>
-                <Ionicons name="time-outline" size={17} color={Colors.primary} />
-              </View>
-              <View>
-                <Text style={styles.infoLabel}>Time Slot</Text>
-                <Text style={styles.infoValue}>{task.timeSlot}</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoItemWithIcon}>
-              <View style={styles.infoIconWrap}>
-                <Ionicons name="briefcase-outline" size={17} color={Colors.primary} />
-              </View>
-              <View>
-                <Text style={styles.infoLabel}>Luggage</Text>
-                <Text style={styles.infoValue}>{task.luggage} bags</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoItemWithIcon}>
-              <View style={styles.infoIconWrap}>
-                <Ionicons name="navigate-circle-outline" size={17} color={Colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.infoLabel}>Pickup Address</Text>
-                <Text style={styles.infoValue}>{task.pickupLocation}</Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoItemWithIcon}>
-              <View style={styles.infoIconWrap}>
-                <Ionicons name="location-outline" size={17} color={Colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.infoLabel}>Drop Address</Text>
-                <Text style={styles.infoValue}>{task.dropLocation}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Update Delivery Status */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Update Delivery Status</Text>
-
-          <View style={styles.statusSelector}>
-            <Text style={styles.statusLabel}>Select Status</Text>
-            <TouchableOpacity
-              style={styles.statusDropdown}
-              onPress={() => setShowStatusDropdown(!showStatusDropdown)}
-            >
-              <Text style={[styles.statusDropdownText, { color: getStatusColor(status) }]}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </Text>
-              <Text style={styles.dropdownIcon}>{showStatusDropdown ? '^' : 'v'}</Text>
-            </TouchableOpacity>
-
-            {showStatusDropdown && (
-              <View style={styles.dropdownMenu}>
-                {['assigned', 'in-progress', 'completed'].map(st => (
-                  <TouchableOpacity
-                    key={st}
-                    style={styles.dropdownItem}
-                    onPress={() => handleUpdateStatus(st)}
-                  >
-                    <Text
-                      style={[
-                        styles.dropdownItemText,
-                        { color: getStatusColor(st) },
-                      ]}
-                    >
-                      {st.charAt(0).toUpperCase() + st.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-        </View>
-
-        {/* Luggage Weight */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Luggage Weight</Text>
-          <Text style={styles.weightLabel}>Enter Weight (kg)</Text>
-          <TextInput
-            style={styles.weightInput}
-            placeholder="Enter weight"
-            value={weight}
-            onChangeText={setWeight}
-            keyboardType="decimal-pad"
-            placeholderTextColor={Colors.textPlaceholder}
-          />
-
-          <TouchableOpacity
-            style={styles.updateButton}
-            onPress={handleUpdateWeight}
-          >
-            <Text style={styles.updateButtonText}>Update</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Customer Luggage Reference */}
-        <View style={styles.referenceCard}>
-          <View style={styles.referenceHeaderRow}>
-            <View style={styles.referenceIconWrap}>
-              <Ionicons name="images-outline" size={18} color={Colors.primary} />
-            </View>
-            <View style={styles.referenceTitleBlock}>
-              <Text style={styles.referenceTitle}>Customer Luggage Reference</Text>
-              <Text style={styles.referenceSubtitle}>Photo uploaded by customer for verification</Text>
-            </View>
-            <View style={styles.referenceStatusChip}>
-              <Text style={styles.referenceStatusText}>{referenceImage ? 'Available' : 'Missing'}</Text>
-            </View>
-          </View>
-
-          {referenceImage ? (
-            <TouchableOpacity
-              style={styles.referenceImageCard}
-              activeOpacity={0.9}
-              onPress={() => openImagePreview(referenceImage)}
-            >
-              <Image source={{ uri: referenceImage }} style={styles.referenceImage} />
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.referencePlaceholder}>
-              <Text style={styles.referencePlaceholderText}>No reference photo provided</Text>
-            </View>
-          )}
-
-          <View style={styles.referenceHintBox}>
-            <Ionicons name="checkmark-circle-outline" size={15} color="#0F8A4B" />
-            <Text style={styles.referenceHint}>Match this before pickup</Text>
-          </View>
-
-          {referenceImage && luggagePhotos.length > 0 && (
-            <View style={styles.compareRow}>
-              <View style={styles.comparePane}>
-                <Text style={styles.compareLabel}>Customer</Text>
-                <Image source={{ uri: referenceImage }} style={styles.compareImage} />
-              </View>
-              <View style={styles.comparePane}>
-                <Text style={styles.compareLabel}>Agent</Text>
-                <Image source={{ uri: luggagePhotos[0].uri }} style={styles.compareImage} />
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Luggage Photos */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Luggage Photos</Text>
-          <Text style={styles.photoDescription}>
-            Capture live photos of the luggage for verification and records.
-          </Text>
-
-          {/* Photo Grid */}
-          {luggagePhotos.length > 0 && (
-            <View style={styles.photoGrid}>
-              {luggagePhotos.map((photo) => (
-                <View key={photo.id} style={styles.photoItem}>
-                  <Image source={{ uri: photo.uri }} style={styles.photoImage} />
-                  <TouchableOpacity
-                    style={styles.photoRemoveButton}
-                    onPress={() => handleRemovePhoto(photo.id)}
-                  >
-                    <Ionicons name="close-circle" size={22} color={Colors.error} />
-                  </TouchableOpacity>
+          <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            {/* Status Card */}
+            <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: getStatusColor(currentStatus) }]}>
+              <View style={styles.statusHeader}>
+                <View>
+                  <Text style={styles.bookingId}>Booking #{bookingId}</Text>
+                  <Text style={[styles.statusBadge, { color: getStatusColor(currentStatus) }]}>
+                    ● {getStatusLabel(currentStatus)}
+                  </Text>
                 </View>
-              ))}
+                <View style={[styles.statusDot, { backgroundColor: getStatusColor(currentStatus) }]} />
+              </View>
             </View>
-          )}
 
-          {isUploadingPhoto && (
-            <View style={styles.uploadingContainer}>
-              <ActivityIndicator size="small" color={Colors.primary} />
-              <Text style={styles.uploadingText}>Uploading photo...</Text>
+            {/* Customer Card */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Customer Information</Text>
+              
+              <View style={styles.infoRow}>
+                <Ionicons name="person-outline" size={16} color={Colors.primary} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Name</Text>
+                  <Text style={styles.infoValue}>{customerName}</Text>
+                </View>
+              </View>
+
+              <View style={styles.infoRow}>
+                <Ionicons name="call-outline" size={16} color={Colors.primary} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Phone</Text>
+                  <Text style={styles.infoValue}>{customerPhone || 'N/A'}</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.callButton, !customerPhone && styles.callButtonDisabled]}
+                onPress={handleCallCustomer}
+                disabled={!customerPhone}
+              >
+                <Ionicons name="call" size={18} color="#fff" />
+                <Text style={styles.callButtonText}>Call Customer</Text>
+              </TouchableOpacity>
             </View>
-          )}
 
-          {/* Add Photo Buttons */}
-          <View style={styles.photoButtonsRow}>
-            <TouchableOpacity
-              style={styles.cameraButton}
-              onPress={handleTakePhoto}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="camera" size={22} color={Colors.textWhite} />
-              <Text style={styles.cameraButtonText}>Take Photo</Text>
-            </TouchableOpacity>
+            {/* Booking Details */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Booking Details</Text>
 
-            <TouchableOpacity
-              style={styles.galleryButton}
-              onPress={handlePickPhoto}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="image" size={22} color={Colors.primary} />
-              <Text style={styles.galleryButtonText}>Gallery</Text>
-            </TouchableOpacity>
-          </View>
+              <View style={styles.infoRow}>
+                <Ionicons name="time-outline" size={16} color={Colors.primary} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Pickup Time</Text>
+                  <Text style={styles.infoValue}>{pickupTime}</Text>
+                </View>
+              </View>
 
-          {luggagePhotos.length > 0 && (
-            <Text style={styles.photoCount}>
-              {luggagePhotos.length} photo{luggagePhotos.length !== 1 ? 's' : ''} uploaded
-            </Text>
-          )}
-        </View>
+              <View style={styles.infoRow}>
+                <Ionicons name="location-outline" size={16} color={Colors.primary} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Pickup Address</Text>
+                  <Text style={styles.infoValue} numberOfLines={2}>{pickupLocation}</Text>
+                </View>
+              </View>
 
-        {/* Status Indicators */}
-        {task.status === 'in-progress' && task.weight && (
-          <View style={styles.successCard}>
-            <Text style={styles.successIcon}>OK</Text>
-            <Text style={styles.successText}>Weight updated: {task.weight} kg</Text>
-          </View>
-        )}
+              <View style={styles.infoRow}>
+                <Ionicons name="flag-outline" size={16} color={Colors.primary} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Drop Address</Text>
+                  <Text style={styles.infoValue} numberOfLines={2}>{dropLocation}</Text>
+                </View>
+              </View>
 
-        {task.status === 'completed' && (
-          <View style={styles.successCard}>
-            <Text style={styles.successIcon}>OK</Text>
-            <Text style={styles.successText}>OTP Verified</Text>
-          </View>
-        )}
+              <View style={styles.infoRow}>
+                <Ionicons name="bag-outline" size={16} color={Colors.primary} />
+                <View style={styles.infoContent}>
+                  <Text style={styles.infoLabel}>Luggage Count</Text>
+                  <Text style={styles.infoValue}>{luggageCount} bags</Text>
+                </View>
+              </View>
+            </View>
 
-        {/* Delivery OTP Verification */}
-        <View style={styles.otpCard}>
-          <Text style={styles.otpTitle}>Delivery OTP Verification</Text>
-          <Text style={styles.otpSubtitle}>Enter OTP provided by customer to complete delivery</Text>
+            {/* Action Buttons */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Actions</Text>
 
-          <View style={styles.otpInputsRow}>
-            {otp.map((digit, index) => (
-              <TextInput
-                key={`otp-${index}`}
-                ref={(ref) => { otpInputRefs.current[index] = ref; }}
-                value={digit}
-                onChangeText={(value) => handleOtpChange(value, index)}
-                onKeyPress={(event) => handleOtpKeyPress(event, index)}
-                onFocus={() => setOtpFocused(index)}
-                onBlur={() => setOtpFocused(-1)}
-                keyboardType="number-pad"
-                textContentType="oneTimeCode"
-                maxLength={1}
-                style={[
-                  styles.otpInputBox,
-                  otpFocused === index && styles.otpInputBoxFocused,
-                  digit !== '' && styles.otpInputBoxFilled,
-                  !!otpError && styles.otpInputBoxError,
-                  !!otpSuccess && digit !== '' && styles.otpInputBoxSuccess,
-                ]}
-                returnKeyType="done"
-                caretHidden
-              />
-            ))}
-          </View>
+              {!pickupConfirmed ? (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.pickupButton]}
+                  onPress={handleConfirmPickup}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                      <Text style={styles.actionButtonText}>Pickup Confirmed</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.actionButton, styles.completedButton]}>
+                  <Ionicons name="checkmark-done-circle" size={18} color="#fff" />
+                  <Text style={styles.actionButtonText}>Pickup Confirmed</Text>
+                </View>
+              )}
+            </View>
 
-          {!!otpError && <Text style={styles.otpErrorText}>{otpError}</Text>}
-          {!!otpSuccess && <Text style={styles.otpSuccessText}>{otpSuccess}</Text>}
-
-          <TouchableOpacity
-            style={[styles.verifyOtpButton, (!isOtpComplete || isVerifyingOtp) && styles.verifyOtpButtonDisabled]}
-            onPress={handleVerifyOtp}
-            disabled={!isOtpComplete || isVerifyingOtp}
-            activeOpacity={0.85}
-          >
-            {isVerifyingOtp ? (
-              <ActivityIndicator size="small" color={Colors.textWhite} />
-            ) : (
-              <Text style={styles.verifyOtpButtonText}>Verify OTP</Text>
+            {/* Luggage Reference */}
+            {referenceImage && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Customer Luggage Reference</Text>
+                <TouchableOpacity
+                  onPress={() => openImagePreview(referenceImage)}
+                  activeOpacity={0.9}
+                >
+                  <Image
+                    source={{ uri: referenceImage }}
+                    style={styles.referenceImage}
+                    resizeMode="cover"
+                  />
+                </TouchableOpacity>
+                <Text style={styles.referenceHint}>Tap to view full image</Text>
+              </View>
             )}
-          </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.resendButton}
-            onPress={handleResendOtp}
-            disabled={resendTimer > 0}
-          >
-            <Text style={[styles.resendButtonText, resendTimer > 0 && styles.resendButtonTextDisabled]}>
-              {resendTimer > 0 ? `Resend OTP in ${resendTimer}s` : 'Resend OTP'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-      </KeyboardAvoidingView>
+            {/* Luggage Photos */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Capture Photos</Text>
+              <Text style={styles.photoDescription}>
+                Take photos for verification and records.
+              </Text>
 
-      <Modal
-        visible={isPreviewVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsPreviewVisible(false)}
-      >
-        <View style={styles.previewModalContainer}>
-          <TouchableOpacity
-            style={styles.previewBackdrop}
-            activeOpacity={1}
-            onPress={() => setIsPreviewVisible(false)}
-          />
-          <View style={styles.previewContent}>
+              {luggagePhotos.length > 0 && (
+                <View style={styles.photoGrid}>
+                  {luggagePhotos.map((photo) => (
+                    <View key={photo.id} style={styles.photoItem}>
+                      <Image source={{ uri: photo.uri }} style={styles.photoImage} />
+                      <TouchableOpacity
+                        style={styles.photoRemoveButton}
+                        onPress={() => handleRemovePhoto(photo.id)}
+                      >
+                        <Ionicons name="close-circle" size={20} color="#ef4444" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {isUploadingPhoto && (
+                <View style={styles.uploadingContainer}>
+                  <ActivityIndicator size="small" color={Colors.primary} />
+                  <Text style={styles.uploadingText}>Uploading...</Text>
+                </View>
+              )}
+
+              <View style={styles.photoButtonsRow}>
+                <TouchableOpacity
+                  style={styles.cameraButton}
+                  onPress={handleTakePhoto}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="camera" size={20} color="#fff" />
+                  <Text style={styles.photoButtonText}>Take Photo</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.galleryButton}
+                  onPress={handlePickPhoto}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="image" size={20} color={Colors.primary} />
+                  <Text style={styles.galleryButtonText}>Gallery</Text>
+                </TouchableOpacity>
+              </View>
+
+              {luggagePhotos.length > 0 && (
+                <Text style={styles.photoCount}>
+                  {luggagePhotos.length} photo{luggagePhotos.length !== 1 ? 's' : ''} captured
+                </Text>
+              )}
+            </View>
+
+            {/* OTP Verification - Only show when picked up */}
+            {currentStatus === 'picked_up' && false && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Delivery OTP</Text>
+                <Text style={styles.otpSubtitle}>Enter OTP from customer</Text>
+
+                <View style={styles.otpInputsRow}>
+                  {otp.map((digit, index) => (
+                    <TextInput
+                      key={`otp-${index}`}
+                      ref={(ref) => { otpInputRefs.current[index] = ref; }}
+                      value={digit}
+                      onChangeText={(value) => handleOtpChange(value, index)}
+                      onKeyPress={(event) => handleOtpKeyPress(event, index)}
+                      onFocus={() => setOtpFocused(index)}
+                      onBlur={() => setOtpFocused(-1)}
+                      keyboardType="number-pad"
+                      maxLength={1}
+                      style={[
+                        styles.otpInputBox,
+                        otpFocused === index && styles.otpInputBoxFocused,
+                        digit !== '' && styles.otpInputBoxFilled,
+                        !!otpError && styles.otpInputBoxError,
+                        !!otpSuccess && styles.otpInputBoxSuccess,
+                      ]}
+                      caretHidden
+                    />
+                  ))}
+                </View>
+
+                {!!otpError && <Text style={styles.otpErrorText}>{otpError}</Text>}
+                {!!otpSuccess && <Text style={styles.otpSuccessText}>{otpSuccess}</Text>}
+
+                <TouchableOpacity
+                  style={[
+                    styles.verifyOtpButton,
+                    (!isOtpComplete || isVerifyingOtp || isProcessing) && styles.verifyOtpButtonDisabled
+                  ]}
+                  onPress={handleVerifyOtp}
+                  disabled={!isOtpComplete || isVerifyingOtp || isProcessing}
+                  activeOpacity={0.85}
+                >
+                  {isVerifyingOtp || isProcessing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.verifyOtpButtonText}>Verify OTP</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.resendButton}
+                  onPress={handleResendOtp}
+                  disabled={resendTimer > 0}
+                >
+                  <Text
+                    style={[
+                      styles.resendButtonText,
+                      resendTimer > 0 && styles.resendButtonTextDisabled
+                    ]}
+                  >
+                    {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+
+        {/* Image Preview Modal */}
+        <Modal
+          visible={isPreviewVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setIsPreviewVisible(false)}
+        >
+          <View style={styles.previewModalContainer}>
             <TouchableOpacity
-              style={styles.previewCloseButton}
+              style={styles.previewBackdrop}
+              activeOpacity={1}
               onPress={() => setIsPreviewVisible(false)}
-            >
-              <Ionicons name="close" size={22} color={Colors.textWhite} />
-            </TouchableOpacity>
-            {!!previewImageUri && (
-              <Image source={{ uri: previewImageUri }} style={styles.previewImage} resizeMode="contain" />
-            )}
+            />
+            <View style={styles.previewContent}>
+              <TouchableOpacity
+                style={styles.previewCloseButton}
+                onPress={() => setIsPreviewVisible(false)}
+              >
+                <Ionicons name="close" size={22} color="#fff" />
+              </TouchableOpacity>
+              {!!previewImageUri && (
+                <Image
+                  source={{ uri: previewImageUri }}
+                  style={styles.previewImage}
+                  resizeMode="contain"
+                />
+              )}
+            </View>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: Colors.background },
   header: {
     backgroundColor: '#ff6600',
     paddingTop: 14,
@@ -594,36 +636,17 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
   },
-  backButton: {
-    padding: 8,
-    marginLeft: -8,
-  },
-  backButtonText: {
-    fontSize: 24,
-    color: Colors.textWhite,
-    fontWeight: '600',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.textWhite,
-  },
-  spacer: {
-    width: 40,
-  },
-  scrollContent: {
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-  },
-  keyboardContainer: {
-    flex: 1,
-  },
+  backButton: { padding: 8, marginLeft: -8 },
+  backButtonText: { fontSize: 24, color: '#fff', fontWeight: '600' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  spacer: { width: 40 },
+  keyboardContainer: { flex: 1 },
+  scrollContent: { flex: 1, paddingHorizontal: 14, paddingTop: 14 },
   card: {
-    backgroundColor: Colors.background,
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 22,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
     padding: 16,
     marginBottom: 14,
     shadowColor: '#000',
@@ -632,550 +655,165 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
-  customerHeader: {
+  statusHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bookingId: { fontSize: 14, fontWeight: '700', color: '#1A1C1E', marginBottom: 4 },
+  statusBadge: { fontSize: 14, fontWeight: '600' },
+  statusDot: { width: 12, height: 12, borderRadius: 6 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: '#1A1C1E', marginBottom: 12 },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     marginBottom: 12,
+    padding: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
   },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  avatarText: {
-    color: Colors.textWhite,
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  customerInfo: {
-    flex: 1,
-  },
-  customerName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  customerId: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  typeBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  typeText: {
-    color: Colors.textWhite,
-    fontSize: 11,
-    fontWeight: '600',
-  },
+  infoContent: { marginLeft: 12, flex: 1 },
+  infoLabel: { fontSize: 11, color: '#64748B', fontWeight: '600', marginBottom: 2 },
+  infoValue: { fontSize: 14, fontWeight: '600', color: '#1A1C1E' },
   callButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    paddingHorizontal: 16,
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  callIcon: {
-    fontSize: 16,
-    marginRight: 8,
-  },
-  callText: {
-    color: Colors.textPrimary,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    marginBottom: 12,
-  },
-  infoRow: {
-    marginBottom: 10,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  infoItemWithIcon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  infoIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#EEF2FF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: '#64748B',
-    marginBottom: 3,
-    fontWeight: '600',
-  },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  statusSelector: {
-    marginBottom: 8,
-  },
-  statusLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  statusDropdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  statusDropdownText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  dropdownIcon: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  dropdownMenu: {
+    backgroundColor: '#10B981',
+    borderRadius: 10,
     marginTop: 8,
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-    overflow: 'hidden',
   },
-  dropdownItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
-  },
-  dropdownItemText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  weightLabel: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 8,
-  },
-  weightInput: {
-    backgroundColor: Colors.backgroundSecondary,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: Colors.textPrimary,
-    marginBottom: 12,
-  },
-  updateButton: {
-    backgroundColor: Colors.buttonPrimary,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  updateButtonText: {
-    color: Colors.textWhite,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  referenceCard: {
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  referenceHeaderRow: {
+  callButtonDisabled: { backgroundColor: '#D1D5DB', opacity: 0.5 },
+  callButtonText: { color: '#fff', fontWeight: '600', marginLeft: 8, fontSize: 14 },
+  actionButton: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  referenceIconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
-  },
-  referenceTitleBlock: {
-    flex: 1,
-  },
-  referenceTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-  },
-  referenceSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-  referenceStatusChip: {
-    backgroundColor: '#F1F5F9',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginLeft: 8,
-  },
-  referenceStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
-  },
-  referenceImageCard: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.backgroundSecondary,
-  },
-  referenceImage: {
-    width: '100%',
-    height: 220,
-  },
-  referencePlaceholder: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 12,
-    borderStyle: 'dashed',
-    backgroundColor: Colors.backgroundSecondary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 34,
-    paddingHorizontal: 12,
-  },
-  referencePlaceholderText: {
-    color: Colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  referenceHint: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#475569',
-    marginLeft: 6,
-  },
-  referenceHintBox: {
-    marginTop: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
+    paddingVertical: 14,
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    marginVertical: 8,
   },
-  compareRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 12,
-  },
-  comparePane: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 10,
-    backgroundColor: Colors.background,
-    padding: 8,
-  },
-  compareLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-    marginBottom: 6,
-  },
-  compareImage: {
-    width: '100%',
-    height: 120,
-    borderRadius: 8,
-    backgroundColor: Colors.backgroundSecondary,
-  },
-  successCard: {
-    backgroundColor: Colors.successLight,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  successIcon: {
-    fontSize: 18,
-    color: Colors.success,
-    marginRight: 10,
-    fontWeight: '700',
-  },
-  successText: {
-    color: Colors.success,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  photoDescription: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginBottom: 14,
-    lineHeight: 18,
-  },
+  pickupButton: { backgroundColor: '#2563EB' },
+  deliveryButton: { backgroundColor: '#DC2626' },
+  completedButton: { backgroundColor: '#4CAF50', opacity: 0.7 },
+  actionButtonText: { color: '#fff', fontWeight: '700', marginLeft: 8, fontSize: 14 },
+  photoDescription: { fontSize: 12, color: '#64748B', marginBottom: 12 },
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   photoItem: {
     width: PHOTO_SIZE,
     height: PHOTO_SIZE,
     borderRadius: 10,
+    marginRight: 12,
+    marginBottom: 12,
     overflow: 'hidden',
     position: 'relative',
   },
-  photoImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 10,
-  },
+  photoImage: { width: '100%', height: '100%' },
   photoRemoveButton: {
     position: 'absolute',
     top: 4,
     right: 4,
-    backgroundColor: 'rgba(255,255,255,0.85)',
+    backgroundColor: '#fff',
     borderRadius: 12,
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   photoButtonsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   cameraButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.buttonPrimary,
     paddingVertical: 12,
-    borderRadius: 8,
-    gap: 8,
-  },
-  cameraButtonText: {
-    color: Colors.textWhite,
-    fontWeight: '600',
-    fontSize: 14,
+    backgroundColor: '#ff6600',
+    borderRadius: 10,
   },
   galleryButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.backgroundSecondary,
     paddingVertical: 12,
-    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.primary,
-    gap: 8,
+    borderColor: '#E5E7EB',
   },
-  galleryButtonText: {
-    color: Colors.primary,
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  photoButtonText: { color: '#fff', fontWeight: '600', marginLeft: 8 },
+  galleryButtonText: { color: Colors.primary, fontWeight: '600', marginLeft: 8 },
+  photoCount: { fontSize: 12, color: '#64748B', marginTop: 8 },
   uploadingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    marginBottom: 10,
-    gap: 8,
+    paddingVertical: 12,
   },
-  uploadingText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  photoCount: {
-    fontSize: 12,
-    color: Colors.success,
-    fontWeight: '500',
-    textAlign: 'center',
-    marginTop: 10,
-  },
-  previewModalContainer: {
-    flex: 1,
-    backgroundColor: Colors.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  previewBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  previewContent: {
-    width: '92%',
-    maxWidth: 480,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: '#111',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  previewCloseButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    zIndex: 2,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  previewImage: {
+  uploadingText: { marginLeft: 8, color: Colors.primary, fontWeight: '600' },
+  referenceImage: {
     width: '100%',
-    height: SCREEN_WIDTH * 1.1,
-    maxHeight: 560,
+    height: 200,
+    borderRadius: 10,
+    marginBottom: 8,
   },
-  otpCard: {
-    backgroundColor: Colors.background,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  otpTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-  },
-  otpSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 4,
-    marginBottom: 12,
-  },
+  referenceHint: { fontSize: 11, color: '#64748B', textAlign: 'center' },
   otpInputsRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 14,
-    gap: 10,
+    justifyContent: 'space-between',
+    marginVertical: 16,
   },
   otpInputBox: {
-    width: 48,
-    height: 56,
-    borderRadius: 12,
+    width: '22%',
+    height: 50,
     borderWidth: 2,
-    borderColor: '#E8C4B0',
-    backgroundColor: Colors.background,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
     textAlign: 'center',
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700',
-    color: Colors.textPrimary,
-    // shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    color: '#1A1C1E',
   },
-  otpInputBoxFocused: {
-    borderColor: Colors.primary,
-    borderWidth: 2,
-    shadowColor: Colors.primary,
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  otpInputBoxFilled: {
-    borderColor: '#D4845E',
-    backgroundColor: '#FFF8F5',
-  },
-  otpInputBoxError: {
-    borderColor: Colors.error,
-    backgroundColor: Colors.errorLight,
-  },
-  otpInputBoxSuccess: {
-    borderColor: Colors.success,
-    backgroundColor: Colors.successLight,
-  },
+  otpInputBoxFocused: { borderColor: Colors.primary, backgroundColor: '#F0F9FF' },
+  otpInputBoxFilled: { borderColor: Colors.primary },
+  otpInputBoxError: { borderColor: '#EF4444' },
+  otpInputBoxSuccess: { borderColor: '#10B981' },
+  otpSubtitle: { fontSize: 13, color: '#64748B', marginBottom: 16 },
+  otpErrorText: { color: '#EF4444', fontSize: 12, textAlign: 'center', marginBottom: 8 },
+  otpSuccessText: { color: '#10B981', fontSize: 12, textAlign: 'center', marginBottom: 8 },
   verifyOtpButton: {
-    backgroundColor: Colors.buttonPrimary,
     paddingVertical: 12,
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 46,
+    marginVertical: 8,
   },
-  verifyOtpButtonDisabled: {
-    backgroundColor: '#E8A58D',
-  },
-  verifyOtpButtonText: {
-    color: Colors.textWhite,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  otpErrorText: {
-    color: Colors.error,
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  otpSuccessText: {
-    color: Colors.success,
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
+  verifyOtpButtonDisabled: { backgroundColor: '#93C5FD', opacity: 0.7 },
+  verifyOtpButtonText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   resendButton: {
-    marginTop: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  resendButtonText: { color: Colors.primary, fontWeight: '600', fontSize: 13 },
+  resendButtonTextDisabled: { color: '#94A3B8' },
+  previewModalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  resendButtonText: {
-    color: Colors.primary,
-    fontSize: 13,
-    fontWeight: '600',
+  previewBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  previewContent: { flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%' },
+  previewCloseButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 10,
   },
-  resendButtonTextDisabled: {
-    color: Colors.textTertiary,
-  },
+  previewImage: { width: '90%', height: '80%' },
 });

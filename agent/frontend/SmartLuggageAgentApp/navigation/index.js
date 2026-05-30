@@ -7,6 +7,7 @@ import GuestScreen      from '../screens/GuestScreen';
 import KYCFormScreen    from '../screens/KYCFormScreen';
 import DashboardScreen  from '../screens/DashboardScreen';
 import TaskDetailsScreen from '../screens/TaskDetailsScreen';
+import AgentTrackingScreen from '../screens/AgentTrackingScreen';
 import ProfileScreen    from '../screens/ProfileScreen';
 import AgentRouteMapScreen from '../screens/AgentRouteMapScreen';
 
@@ -38,9 +39,11 @@ export default function RootNavigator() {
       <Stack.Screen name="KYCForm"     component={KYCFormScreen}      options={{ headerShown: false }} />
       <Stack.Screen name="Dashboard"   component={DashboardScreen}    options={{ headerShown: false }} />
       <Stack.Screen name="TaskDetails" component={TaskDetailsScreen}  options={{ headerShown: false }} />
+      <Stack.Screen name="AgentTracking" component={AgentTrackingScreen} options={{ headerShown: false }} />
       <Stack.Screen name="AgentRouteMap" component={AgentRouteMapScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Profile"     component={ProfileScreen}      options={{ headerShown: false }} />
     </Stack.Navigator>
 
   );
 }
+
