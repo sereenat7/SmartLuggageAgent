@@ -53,15 +53,47 @@ const formatDate = (date) => {
 const formatTime = (time) => {
   if (!time) return null;
   if (typeof time === 'string') {
+    time = time.trim();
     // If already in HH:MM:SS format, return as is
-    if (time.match(/^\d{2}:\d{2}:\d{2}$/)) return time;
+    if (time.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
+      const parts = time.split(':');
+      const h = parts[0].padStart(2, '0');
+      return `${h}:${parts[1]}:${parts[2]}`;
+    }
     // If in HH:MM format, add :00
-    if (time.match(/^\d{2}:\d{2}$/)) return time + ':00';
-    // Handle other formats
-    return null;
+    if (time.match(/^\d{1,2}:\d{2}$/)) {
+      const parts = time.split(':');
+      const h = parts[0].padStart(2, '0');
+      return `${h}:${parts[1]}:00`;
+    }
+    // Handle AM/PM formats, e.g. "3:44 pm", "12:14 PM", "03:44 PM"
+    const ampmMatch = time.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+    if (ampmMatch) {
+      let hours = parseInt(ampmMatch[1]);
+      const minutes = ampmMatch[2];
+      const ampm = ampmMatch[3].toLowerCase();
+      
+      if (ampm === 'pm' && hours < 12) {
+        hours += 12;
+      } else if (ampm === 'am' && hours === 12) {
+        hours = 0;
+      }
+      
+      const formattedHours = String(hours).padStart(2, '0');
+      return `${formattedHours}:${minutes}:00`;
+    }
+    
+    // Fallback if it contains something else but has HH:MM, try to parse
+    // e.g. "3:44" (without am/pm)
+    const matchSimple = time.match(/^(\d{1,2}):(\d{2})/);
+    if (matchSimple) {
+      const formattedHours = matchSimple[1].padStart(2, '0');
+      return `${formattedHours}:${matchSimple[2]}:00`;
+    }
   }
   return null;
 };
+
 
 // Initialize Razorpay instance
 const razorpay = new Razorpay({

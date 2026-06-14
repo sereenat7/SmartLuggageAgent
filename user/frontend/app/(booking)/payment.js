@@ -31,7 +31,7 @@ export default function RazorpayPaymentScreen() {
   // Test backend connectivity
   const testBackendConnection = async () => {
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000';
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000';
       console.log('🔌 Testing backend connectivity to:', apiUrl);
       
       const response = await fetch(`${apiUrl}/health`, {
@@ -84,7 +84,7 @@ export default function RazorpayPaymentScreen() {
 
       console.log('✅ STEP 3: Payment Details prepared:', paymentDetails);
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.227.242.44:5000';
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000';
       const verifyUrl = `${apiUrl}/api/payment/verify-payment`;
       console.log(`✅ STEP 4: API URL ready: ${verifyUrl}`);
       console.log(`✅ STEP 4: Token: ${userToken ? userToken.substring(0, 20) + '...' : 'NO TOKEN'}`);

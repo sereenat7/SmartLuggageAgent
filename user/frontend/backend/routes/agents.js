@@ -667,7 +667,8 @@ router.get("/inbox", async (req, res) => {
               u.name, u.phone,
               b.pickup_time, b.departure_date, b.bag_count, b.bag_weight, b.pickup_address,
               b.pickup_latitude, b.pickup_longitude, b.drop_address, b.airline_name, b.flight_number,
-              b.assignment_due_at, b.agent_eta_minutes, b.agent_leave_by_at, b.pickup_h3_index, b.assigned_agent_id
+              b.assignment_due_at, b.agent_eta_minutes, b.agent_leave_by_at, b.pickup_h3_index, b.assigned_agent_id,
+              b.photos
        FROM agent_queue q
        JOIN users u ON u.id = q.user_id
        LEFT JOIN bookings b ON b.id = q.booking_id
@@ -749,64 +750,87 @@ router.get("/inbox", async (req, res) => {
       return new Date(a.requested_at).getTime() - new Date(b.requested_at).getTime();
     });
     const activeSql = currentAgentId
-      ? `SELECT s.session_id, s.user_id, s.agent_id, s.start_time, a.name AS agent_name, a.phone AS agent_phone,
-             u.name AS user_name, u.phone AS user_phone,
-             b.pickup_address, b.pickup_latitude, b.pickup_longitude,
-             b.drop_address, b.drop_latitude, b.drop_longitude,
-             b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
-             b.airline_name, b.flight_number, b.assignment_due_at
-         FROM agent_sessions s
-         JOIN support_agents a ON a.agent_id = s.agent_id
-         JOIN users u ON u.id = s.user_id
-         LEFT JOIN bookings b ON b.id = s.booking_id
-         WHERE s.status = 'active' AND s.agent_id = ? ORDER BY s.start_time DESC`
-      : `SELECT s.session_id, s.user_id, s.agent_id, s.start_time, a.name AS agent_name, a.phone AS agent_phone,
-             u.name AS user_name, u.phone AS user_phone,
-             b.pickup_address, b.pickup_latitude, b.pickup_longitude,
-             b.drop_address, b.drop_latitude, b.drop_longitude,
-             b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
-             b.airline_name, b.flight_number, b.assignment_due_at
-         FROM agent_sessions s
-         JOIN support_agents a ON a.agent_id = s.agent_id
-         JOIN users u ON u.id = s.user_id
-         LEFT JOIN bookings b ON b.id = s.booking_id
-         WHERE s.status = 'active' ORDER BY s.start_time DESC`;
+      ? `SELECT s.session_id, s.user_id, s.agent_id, s.booking_id, s.start_time, a.name AS agent_name, a.phone AS agent_phone,
+              u.name AS user_name, u.phone AS user_phone,
+              b.pickup_address, b.pickup_latitude, b.pickup_longitude,
+              b.drop_address, b.drop_latitude, b.drop_longitude,
+              b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
+              b.airline_name, b.flight_number, b.assignment_due_at, b.photos
+          FROM agent_sessions s
+          JOIN support_agents a ON a.agent_id = s.agent_id
+          JOIN users u ON u.id = s.user_id
+          LEFT JOIN bookings b ON b.id = s.booking_id
+          WHERE s.status = 'active' AND s.agent_id = ? ORDER BY s.start_time DESC`
+      : `SELECT s.session_id, s.user_id, s.agent_id, s.booking_id, s.start_time, a.name AS agent_name, a.phone AS agent_phone,
+              u.name AS user_name, u.phone AS user_phone,
+              b.pickup_address, b.pickup_latitude, b.pickup_longitude,
+              b.drop_address, b.drop_latitude, b.drop_longitude,
+              b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
+              b.airline_name, b.flight_number, b.assignment_due_at, b.photos
+          FROM agent_sessions s
+          JOIN support_agents a ON a.agent_id = s.agent_id
+          JOIN users u ON u.id = s.user_id
+          LEFT JOIN bookings b ON b.id = s.booking_id
+          WHERE s.status = 'active' ORDER BY s.start_time DESC`;
     const activeRows = await runQuery(activeSql, currentAgentId ? [currentAgentId] : []);
     return res.json({
       success: true,
-      waiting: visibleWaiting.map((row) => ({
-        queueId: row.id,                          // ✅ FIXED: was row.queue_id
-        userId: row.user_id,
-        bookingId: row.booking_id,
-        preferredAgentId: row.preferred_agent_id,
-        name: row.name, phone: row.phone,
-        requestedAt: row.requested_at,
-        pickupTime: row.pickup_time, departureDate: row.departure_date,
-        bagCount: row.bag_count, bagWeight: row.bag_weight,
-        pickupAddress: row.pickup_address,
-        pickupLatitude: row.pickup_latitude, pickupLongitude: row.pickup_longitude,
-        dropAddress: row.drop_address, airlineName: row.airline_name,
-        flightNumber: row.flight_number, assignmentDueAt: row.assignment_due_at,
-        distanceKm: row.distance_km,
-        travelEtaMinutes: row.travel_eta_minutes,
-        etaMinutes: row.eta_minutes,
-        pickupH3Index: row.pickup_h3_index,
-        targetPickupAt: row.target_pickup_at,
-        leaveByAt: row.leave_by_at,
-        urgencyMinutes: row.urgency_minutes,
-      })),
-      activeSessions: activeRows.map((row) => ({
-        sessionId: row.session_id, userId: row.user_id, agentId: row.agent_id,
-        startTime: row.start_time, agentName: row.agent_name, agentPhone: row.agent_phone,
-        userName: row.user_name, userPhone: row.user_phone,
-        pickupAddress: row.pickup_address, pickupLatitude: row.pickup_latitude,
-        pickupLongitude: row.pickup_longitude, dropAddress: row.drop_address,
-        dropLatitude: row.drop_latitude, dropLongitude: row.drop_longitude,
-        pickupTime: row.pickup_time, departureDate: row.departure_date,
-        bagCount: row.bag_count, bagWeight: row.bag_weight,
-        airlineName: row.airline_name, flightNumber: row.flight_number,
-        assignmentDueAt: row.assignment_due_at,
-      })),
+      waiting: visibleWaiting.map((row) => {
+        let photosArray = null;
+        if (row.photos) {
+          try {
+            photosArray = JSON.parse(row.photos);
+          } catch (e) {
+            photosArray = row.photos;
+          }
+        }
+        return {
+          queueId: row.id,
+          userId: row.user_id,
+          bookingId: row.booking_id,
+          preferredAgentId: row.preferred_agent_id,
+          name: row.name, phone: row.phone,
+          requestedAt: row.requested_at,
+          pickupTime: row.pickup_time, departureDate: row.departure_date,
+          bagCount: row.bag_count, bagWeight: row.bag_weight,
+          pickupAddress: row.pickup_address,
+          pickupLatitude: row.pickup_latitude, pickupLongitude: row.pickup_longitude,
+          dropAddress: row.drop_address, airlineName: row.airline_name,
+          flightNumber: row.flight_number, assignmentDueAt: row.assignment_due_at,
+          distanceKm: row.distance_km,
+          travelEtaMinutes: row.travel_eta_minutes,
+          etaMinutes: row.eta_minutes,
+          pickupH3Index: row.pickup_h3_index,
+          targetPickupAt: row.target_pickup_at,
+          leaveByAt: row.leave_by_at,
+          urgencyMinutes: row.urgency_minutes,
+          photos: photosArray,
+        };
+      }),
+      activeSessions: activeRows.map((row) => {
+        let photosArray = null;
+        if (row.photos) {
+          try {
+            photosArray = JSON.parse(row.photos);
+          } catch (e) {
+            photosArray = row.photos;
+          }
+        }
+        return {
+          sessionId: row.session_id, userId: row.user_id, agentId: row.agent_id,
+          startTime: row.start_time, agentName: row.agent_name, agentPhone: row.agent_phone,
+          userName: row.user_name, userPhone: row.user_phone,
+          bookingId: row.booking_id,
+          pickupAddress: row.pickup_address, pickupLatitude: row.pickup_latitude,
+          pickupLongitude: row.pickup_longitude, dropAddress: row.drop_address,
+          dropLatitude: row.drop_latitude, dropLongitude: row.drop_longitude,
+          pickupTime: row.pickup_time, departureDate: row.departure_date,
+          bagCount: row.bag_count, bagWeight: row.bag_weight,
+          airlineName: row.airline_name, flightNumber: row.flight_number,
+          assignmentDueAt: row.assignment_due_at,
+          photos: photosArray,
+        };
+      }),
     });
   } catch (error) {
     console.error("inbox error:", error);
@@ -931,6 +955,12 @@ router.post("/respond-request", async (req, res) => {
        VALUES (?, ?, ?, 'active', CURRENT_TIMESTAMP)`,
       [request.user_id, request.booking_id, resolvedAgentId]
     );
+    if (request.booking_id) {
+      await runQuery(
+        "UPDATE bookings SET status = 'assigned', assignment_status = 'assigned' WHERE id = ?",
+        [request.booking_id]
+      );
+    }
     // ✅ FIXED: was WHERE queue_id = ?
     await runQuery(
       "DELETE FROM agent_queue WHERE id = ? AND status = 'waiting'",

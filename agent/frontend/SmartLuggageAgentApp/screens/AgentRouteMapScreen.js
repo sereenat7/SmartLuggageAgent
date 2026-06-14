@@ -70,6 +70,7 @@ const buildInitialRegion = (agentLocation, customerLocation) => {
 const buildTaskFromRequest = (request) => ({
   id: request?.sessionId ? `session-${request.sessionId}` : `request-${request?.queueId || Date.now()}`,
   sessionId: request?.sessionId || null,
+  bookingId: request?.bookingId || request?.booking_id || null,
   agentName: request?.agentName || 'Agent',
   agentId: request?.agentId || null,
   type: 'Pickup',
@@ -83,6 +84,7 @@ const buildTaskFromRequest = (request) => ({
   customerPhone: request?.phone || '',
   pickupLatitude: request?.pickupLatitude || null,
   pickupLongitude: request?.pickupLongitude || null,
+  photos: request?.photos || null,
 });
 
 export default function AgentRouteMapScreen({ navigation, route }) {
@@ -321,6 +323,7 @@ export default function AgentRouteMapScreen({ navigation, route }) {
           params: {
             task: buildTaskFromRequest({
               ...request,
+              ...customerFromServer,
               bookingId: bookingIdFromParams,
               sessionId: request?.sessionId,
             }),

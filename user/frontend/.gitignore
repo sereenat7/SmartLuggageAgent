@@ -49,7 +49,7 @@ echo ".env" >> .gitignore
 node_modules/
 .expo/
 .env.*
-user/frontend/backend/.env
 node_modules/
 .env
 .expo/
+backend/logs/

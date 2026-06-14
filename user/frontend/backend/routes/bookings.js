@@ -61,16 +61,57 @@ const formatDate = (date) => {
   return null;
 };
 
+// Helper function to normalize booking status for client apps
+const getBookingStatus = (status) => {
+  if (!status) return 'pending';
+  const s = String(status).toLowerCase().trim();
+  if (s === 'picked_up' || s === 'picked') return 'picked';
+  if (s === 'in-progress' || s === 'assigned') return 'assigned';
+  if (s === 'in_transit' || s === 'in transit') return 'in transit';
+  return s;
+};
+
 // Helper function to format times as HH:MM:SS
 const formatTime = (time) => {
   if (!time) return null;
   if (typeof time === 'string') {
+    time = time.trim();
     // If already in HH:MM:SS format, return as is
-    if (time.match(/^\d{2}:\d{2}:\d{2}$/)) return time;
+    if (time.match(/^\d{1,2}:\d{2}:\d{2}$/)) {
+      const parts = time.split(':');
+      const h = parts[0].padStart(2, '0');
+      return `${h}:${parts[1]}:${parts[2]}`;
+    }
     // If in HH:MM format, add :00
-    if (time.match(/^\d{2}:\d{2}$/)) return time + ':00';
-    // Handle other formats
-    return null;
+    if (time.match(/^\d{1,2}:\d{2}$/)) {
+      const parts = time.split(':');
+      const h = parts[0].padStart(2, '0');
+      return `${h}:${parts[1]}:00`;
+    }
+    // Handle AM/PM formats, e.g. "3:44 pm", "12:14 PM", "03:44 PM"
+    const ampmMatch = time.match(/^(\d{1,2}):(\d{2})\s*(am|pm)$/i);
+    if (ampmMatch) {
+      let hours = parseInt(ampmMatch[1]);
+      const minutes = ampmMatch[2];
+      const ampm = ampmMatch[3].toLowerCase();
+      
+      if (ampm === 'pm' && hours < 12) {
+        hours += 12;
+      } else if (ampm === 'am' && hours === 12) {
+        hours = 0;
+      }
+      
+      const formattedHours = String(hours).padStart(2, '0');
+      return `${formattedHours}:${minutes}:00`;
+    }
+    
+    // Fallback if it contains something else but has HH:MM, try to parse
+    // e.g. "3:44" (without am/pm)
+    const matchSimple = time.match(/^(\d{1,2}):(\d{2})/);
+    if (matchSimple) {
+      const formattedHours = matchSimple[1].padStart(2, '0');
+      return `${formattedHours}:${matchSimple[2]}:00`;
+    }
   }
   return null;
 };
@@ -669,6 +710,8 @@ router.get("/agent-details/:bookingId", (req, res) => {
   const { bookingId } = req.params;
   const query = `
     SELECT b.id, b.username, b.phone, b.pickup_address, b.pickup_latitude, b.pickup_longitude,
+           b.drop_address, b.drop_latitude, b.drop_longitude, b.pickup_time, b.departure_date,
+           b.bag_count, b.bag_weight, b.airline_name, b.flight_number, b.photos,
            u.name AS user_name, u.phone AS user_phone
     FROM bookings b
     LEFT JOIN users u ON u.id = (
@@ -690,6 +733,14 @@ router.get("/agent-details/:bookingId", (req, res) => {
       return res.status(404).json({ success: false, message: "Booking not found" });
     }
     const row = results[0];
+    let photosArray = null;
+    if (row.photos) {
+      try {
+        photosArray = JSON.parse(row.photos);
+      } catch (e) {
+        photosArray = row.photos;
+      }
+    }
     res.json({
       success: true,
       customer: {
@@ -698,6 +749,16 @@ router.get("/agent-details/:bookingId", (req, res) => {
         pickupAddress: row.pickup_address || "",
         pickupLatitude: row.pickup_latitude,
         pickupLongitude: row.pickup_longitude,
+        dropAddress: row.drop_address || "",
+        dropLatitude: row.drop_latitude,
+        dropLongitude: row.drop_longitude,
+        pickupTime: row.pickup_time,
+        departureDate: row.departure_date,
+        bagCount: row.bag_count,
+        bagWeight: row.bag_weight,
+        airlineName: row.airline_name,
+        flightNumber: row.flight_number,
+        photos: photosArray,
       },
     });
   });
@@ -708,8 +769,18 @@ router.get("/:bookingId", verifyToken, (req, res) => {
   const { bookingId } = req.params;
   const phone = req.phone;
 
-  const query = "SELECT * FROM bookings WHERE id = ? AND phone = ?";
-  db.query(query, [bookingId, phone], (err, results) => {
+  // Normalize phone number - try both formats (with and without +91)
+  let phonesToTry = [phone];
+  if (phone && phone.startsWith('+91')) {
+    phonesToTry.push(phone.substring(3)); // Remove +91
+  } else if (phone && phone.length === 10 && !phone.startsWith('0')) {
+    phonesToTry.push('+91' + phone);
+  }
+
+  const placeholders = phonesToTry.map(() => '?').join(' OR phone = ');
+  const query = `SELECT * FROM bookings WHERE id = ? AND (phone = ${placeholders})`;
+  
+  db.query(query, [bookingId, ...phonesToTry], (err, results) => {
     if (err) {
       return res.json({ success: false, message: "DB Error", error: err });
     }
@@ -718,7 +789,11 @@ router.get("/:bookingId", verifyToken, (req, res) => {
       return res.status(404).json({ success: false, message: "Booking not found" });
     }
 
-    res.json({ success: true, booking: results[0] });
+    const bookingData = {
+      ...results[0],
+      booking_status: getBookingStatus(results[0].status),
+    };
+    res.json({ success: true, booking: bookingData });
   });
 });
 
@@ -756,7 +831,66 @@ router.get("/", verifyToken, (req, res) => {
     if (results.length > 0) {
       console.log('DEBUG: First booking phone:', results[0].phone);
     }
-    res.json({ success: true, bookings: results });
+    const bookingsData = results.map(row => ({
+      ...row,
+      booking_status: getBookingStatus(row.status),
+    }));
+    res.json({ success: true, bookings: bookingsData });
+  });
+});
+
+// Confirm pickup - NO TOKEN REQUIRED FOR AGENT
+router.patch("/pickup/:bookingId", (req, res) => {
+  const { bookingId } = req.params;
+  const updateBookingQuery = "UPDATE bookings SET status = 'picked_up', assignment_status = 'picked_up' WHERE id = ?";
+  db.query(updateBookingQuery, [bookingId], (err, result) => {
+    if (err) {
+      console.error("Pickup Error:", err);
+      return res.status(500).json({ success: false, message: "DB Error updating booking status", error: err });
+    }
+    
+    // Also update session status if needed
+    const updateSessionQuery = "UPDATE agent_sessions SET status = 'active' WHERE booking_id = ? AND status = 'active'";
+    db.query(updateSessionQuery, [bookingId], (sessionErr) => {
+      if (sessionErr) {
+        console.error("Session update error on pickup:", sessionErr);
+      }
+      res.json({ success: true, message: "Pickup confirmed successfully" });
+    });
+  });
+});
+
+// Mark delivered - NO TOKEN REQUIRED FOR AGENT
+router.patch("/delivered/:bookingId", (req, res) => {
+  const { bookingId } = req.params;
+  const updateBookingQuery = "UPDATE bookings SET status = 'delivered', assignment_status = 'delivered' WHERE id = ?";
+  db.query(updateBookingQuery, [bookingId], (err, result) => {
+    if (err) {
+      console.error("Delivery Error:", err);
+      return res.status(500).json({ success: false, message: "DB Error updating booking status", error: err });
+    }
+    
+    // Find agent session and free the agent
+    const findSessionQuery = "SELECT session_id, agent_id FROM agent_sessions WHERE booking_id = ? AND status = 'active' LIMIT 1";
+    db.query(findSessionQuery, [bookingId], (sessionErr, sessions) => {
+      if (sessionErr || sessions.length === 0) {
+        console.log("No active agent session found for booking:", bookingId);
+        return res.json({ success: true, message: "Delivery confirmed, but no active agent session found" });
+      }
+      
+      const { session_id, agent_id } = sessions[0];
+      const completeSessionQuery = "UPDATE agent_sessions SET status = 'completed', end_time = CURRENT_TIMESTAMP WHERE session_id = ?";
+      db.query(completeSessionQuery, [session_id], (completeErr) => {
+        if (completeErr) console.error("Complete session error:", completeErr);
+        
+        const freeAgentQuery = "UPDATE support_agents SET status = 'available', current_user_id = NULL WHERE agent_id = ?";
+        db.query(freeAgentQuery, [agent_id], (freeErr) => {
+          if (freeErr) console.error("Free agent error:", freeErr);
+          
+          res.json({ success: true, message: "Delivery completed successfully" });
+        });
+      });
+    });
   });
 });
 

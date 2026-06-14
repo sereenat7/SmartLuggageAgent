@@ -52,23 +52,42 @@ export default function TaskDetailsScreen({ navigation, route }) {
   const otpInputRefs = useRef([]);
 
   // Safe getters for booking fields
-  const customerName = booking?.username || booking?.name || 'Customer';
-  const customerPhone = booking?.phone || '';
-  const pickupLocation = booking?.pickup_address || booking?.pickupLocation || 'Pickup location pending';
-  const dropLocation = booking?.drop_address || booking?.dropLocation || 'Drop location pending';
-  const pickupTime = booking?.pickup_time || booking?.pickupTime || 'Time slot pending';
-  const luggageCount = Number(booking?.bag_count || booking?.luggage || 1);
-  const bookingId = booking?.id || booking?.bookingId;
+  const customerName = booking?.customerName || booking?.username || booking?.name || booking?.userName || 'Customer';
+  const customerPhone = booking?.phone || booking?.phoneNumber || booking?.customerPhone || booking?.userPhone || '';
+  const pickupLocation = booking?.pickup_address || booking?.pickupLocation || booking?.pickupAddress || 'Pickup location pending';
+  const dropLocation = booking?.drop_address || booking?.dropLocation || booking?.dropAddress || 'Drop location pending';
+  const pickupTime = booking?.pickup_time || booking?.pickupTime || booking?.timeSlot || 'Time slot pending';
+  const luggageCount = Number(booking?.bag_count || booking?.luggage || booking?.bagCount || 1);
+  const bookingId = booking?.bookingId || booking?.booking_id || (String(booking?.id).includes('session') || String(booking?.id).includes('request') ? null : booking?.id);
   const referenceImageUri = (() => {
-    const candidate = booking?.referenceImage || booking?.reference_image || booking?.photos || booking?.photo || booking?.image || null;
+    let candidate = booking?.referenceImage || booking?.reference_image || booking?.photos || booking?.photo || booking?.image || null;
     if (!candidate) return null;
+    if (typeof candidate === 'string') {
+      if (candidate.startsWith('[') && candidate.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(candidate);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            candidate = parsed[0];
+          } else {
+            return null;
+          }
+        } catch (e) {
+          // Keep candidate as is if not valid JSON
+        }
+      } else {
+        return candidate;
+      }
+    }
     if (typeof candidate === 'string') return candidate;
-    if (Array.isArray(candidate)) return candidate[0]?.uri || candidate[0]?.url || null;
+    if (Array.isArray(candidate)) {
+      const first = candidate[0];
+      if (typeof first === 'string') return first;
+      return first?.uri || first?.url || null;
+    }
     if (typeof candidate === 'object') return candidate.uri || candidate.url || null;
     return null;
   })();
-  const referenceImage =
-    referenceImageUri;
+  const referenceImage = referenceImageUri;
 
   const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
   const isOnTheWay = normalizeStatus(currentStatus) === 'on-the-way' || normalizeStatus(currentStatus) === 'on_the_way' || normalizeStatus(currentStatus) === 'picked_up';
@@ -260,7 +279,15 @@ export default function TaskDetailsScreen({ navigation, route }) {
         'Success',
         newStatus === 'delivered'
           ? 'Delivery completed!'
-          : 'Pickup confirmed. Status updated to on the way.'
+          : 'Pickup confirmed. Status updated to on the way.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              navigation.navigate('Dashboard', { activeTab: 'Completed', refreshInbox: true });
+            }
+          }
+        ]
       );
     } catch (error) {
       console.error('[TaskDetails] Error:', error);
@@ -323,7 +350,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => navigation.navigate('Dashboard', { activeTab: 'In Progress' })}
             style={styles.backButton}
           >
             <Text style={styles.backButtonText}>← </Text>
@@ -337,18 +364,6 @@ export default function TaskDetailsScreen({ navigation, route }) {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
-            {/* Status Card */}
-            <View style={[styles.card, { borderLeftWidth: 4, borderLeftColor: getStatusColor(currentStatus) }]}>
-              <View style={styles.statusHeader}>
-                <View>
-                  <Text style={styles.bookingId}>Booking #{bookingId}</Text>
-                  <Text style={[styles.statusBadge, { color: getStatusColor(currentStatus) }]}>
-                    ● {getStatusLabel(currentStatus)}
-                  </Text>
-                </View>
-                <View style={[styles.statusDot, { backgroundColor: getStatusColor(currentStatus) }]} />
-              </View>
-            </View>
 
             {/* Customer Card */}
             <View style={styles.card}>
@@ -384,6 +399,16 @@ export default function TaskDetailsScreen({ navigation, route }) {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Booking Details</Text>
 
+              {bookingId && (
+                <View style={styles.infoRow}>
+                  <Ionicons name="receipt-outline" size={16} color={Colors.primary} />
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Booking ID</Text>
+                    <Text style={styles.infoValue}>#{bookingId}</Text>
+                  </View>
+                </View>
+              )}
+
               <View style={styles.infoRow}>
                 <Ionicons name="time-outline" size={16} color={Colors.primary} />
                 <View style={styles.infoContent}>
@@ -415,33 +440,6 @@ export default function TaskDetailsScreen({ navigation, route }) {
                   <Text style={styles.infoValue}>{luggageCount} bags</Text>
                 </View>
               </View>
-            </View>
-
-            {/* Action Buttons */}
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Actions</Text>
-
-              {!pickupConfirmed ? (
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.pickupButton]}
-                  onPress={handleConfirmPickup}
-                  disabled={isProcessing}
-                >
-                  {isProcessing ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                      <Text style={styles.actionButtonText}>Pickup Confirmed</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-              ) : (
-                <View style={[styles.actionButton, styles.completedButton]}>
-                  <Ionicons name="checkmark-done-circle" size={18} color="#fff" />
-                  <Text style={styles.actionButtonText}>Pickup Confirmed</Text>
-                </View>
-              )}
             </View>
 
             {/* Luggage Reference */}
@@ -516,6 +514,36 @@ export default function TaskDetailsScreen({ navigation, route }) {
                 <Text style={styles.photoCount}>
                   {luggagePhotos.length} photo{luggagePhotos.length !== 1 ? 's' : ''} captured
                 </Text>
+              )}
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Actions</Text>
+
+              {!pickupConfirmed ? (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.pickupButton]}
+                  onPress={handleConfirmPickup}
+                  disabled={isProcessing}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
+                      <Text style={styles.actionButtonText}>Pickup Confirmed</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.completedButton]}
+                  onPress={() => navigation.navigate('Dashboard', { activeTab: 'Completed', refreshInbox: true })}
+                >
+                  <Ionicons name="checkmark-done-circle" size={18} color="#fff" />
+                  <Text style={styles.actionButtonText}>Go to Completed Tasks</Text>
+                </TouchableOpacity>
               )}
             </View>
 

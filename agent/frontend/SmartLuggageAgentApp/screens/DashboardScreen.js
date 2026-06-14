@@ -316,19 +316,20 @@ export default function DashboardScreen({ navigation, route }) {
   const buildTaskFromSession = (session) => ({
     id: `session-${session.sessionId}`,
     sessionId: session.sessionId,
-    bookingId: session.bookingId || null,
+    bookingId: session.bookingId || session.booking_id || null,
     agentName: session.userName || 'Customer',
     customerName: session.userName || 'Customer',
     agentId: `USR${session.userId || ''}`,
     type: 'Pickup',
-    pickupLocation: session.pickupLocation || 'Pickup location pending',
-    dropLocation: session.dropLocation || 'Drop location pending',
+    pickupLocation: session.pickupLocation || session.pickupAddress || session.pickup_address || 'Pickup location pending',
+    dropLocation: session.dropLocation || session.dropAddress || session.drop_address || 'Drop location pending',
     timeSlot: session.timeSlot || session.pickupTime || 'Time slot pending',
-    luggage: Number(session.luggage || session.bagCount || 1),
+    luggage: Number(session.luggage || session.bagCount || session.bag_count || 1),
     status: 'in-progress',
     phoneNumber: session.userPhone || '',
     pickupLatitude: session.pickupLatitude,
     pickupLongitude: session.pickupLongitude,
+    photos: session.photos || null,
   });
 
   const pingAgentLocation = useCallback(async () => {
@@ -636,7 +637,7 @@ function InProgressSessionCard({ session, onViewTask }) {
   const routeSummary = [
     session.departureCity ? `From ${session.departureCity}` : null,
     session.arrivalCity ? `To ${session.arrivalCity}` : null,
-    session.timeSlot ? `Pickup ${session.timeSlot}` : null,
+    (session.timeSlot || session.pickupTime) ? `Pickup ${session.timeSlot || session.pickupTime}` : null,
   ].filter(Boolean).join(' • ');
 
   const luggageSummary = [
