@@ -1,24 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, StatusBar, ActivityIndicator, Alert, Platform
+  SafeAreaView, StatusBar, ActivityIndicator, Alert, Platform, Modal
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import bookingSync from '../../utils/bookingSync';
 
 export default function BookingDetailsScreen() {
   const router = useRouter();
   const { bookingId } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(null);
+  const [cancellationModalVisible, setCancellationModalVisible] = useState(false);
+  const [cancellationDetails, setCancellationDetails] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/bookings`;
 
   useEffect(() => {
     fetchBookingDetails();
   }, []);
+
+  const handleTrackBooking = async () => {
+    if (!bookingId) return;
+    await AsyncStorage.setItem('activeTrackBookingId', String(bookingId));
+    router.push({
+      pathname: '/(tabs)/track',
+      params: { bookingId: String(bookingId) }
+    });
+  };
 
   const fetchBookingDetails = async () => {
     try {
@@ -45,6 +58,91 @@ export default function BookingDetailsScreen() {
       Alert.alert("Error", "Failed to load booking details");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const isCancellable = () => {
+    if (!booking) return false;
+    const status = (booking.status || booking.booking_status || '').toLowerCase();
+    // Can cancel: pending, queued, agent_assigned, in_progress
+    // Cannot cancel: on_the_way, completed, cancelled
+    return !['on_the_way', 'completed', 'cancelled'].includes(status);
+  };
+
+  const handleCancelClick = async () => {
+    if (!isCancellable()) {
+      Alert.alert("Cannot Cancel", "This booking cannot be cancelled at this stage.");
+      return;
+    }
+
+    // First, check if we need to show breakdown
+    const status = (booking.status || booking.booking_status || '').toLowerCase();
+    
+    if (status === 'queued' || status === 'agent_assigned') {
+      // Show cancellation breakdown for Agent Assigned
+      setCancellationModalVisible(true);
+    } else if (status === 'in_progress') {
+      // Show cancellation breakdown for In Progress
+      setCancellationModalVisible(true);
+    } else if (status === 'pending') {
+      // For pending, show quick confirmation
+      setCancellationModalVisible(true);
+    }
+  };
+
+  const confirmCancellation = async () => {
+    setCancelling(true);
+    try {
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        Alert.alert("Error", "Not authenticated");
+        setCancelling(false);
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/cancel/${bookingId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          reason: 'Customer initiated cancellation'
+        })
+      });
+
+      const data = await response.json();
+      console.log('📋 Cancellation Response:', data);
+
+      setCancelling(false);
+      setCancellationModalVisible(false);
+
+      if (data.success) {
+        // Update local booking state
+        setBooking(data.booking);
+        const refundAmount = Math.max(data.cancellationDetails?.refundAmount || 0, 0);
+        
+        // Clear booking cache to ensure fresh data on homepage
+        await bookingSync.clearBookingCache(bookingId);
+        
+        Alert.alert("Success", `Booking cancelled successfully!\n\nRefund Amount: ₹${refundAmount}`, [
+          {
+            text: "OK",
+            onPress: () => {
+              // Add small delay to ensure server processes cancellation
+              setTimeout(() => {
+                router.back();
+              }, 300);
+            }
+          }
+        ]);
+      } else {
+        Alert.alert("Cannot Cancel", data.message || "Failed to cancel booking");
+      }
+    } catch (error) {
+      console.error("❌ Error cancelling booking:", error);
+      setCancelling(false);
+      Alert.alert("Error", "Failed to cancel booking");
     }
   };
 
@@ -76,6 +174,7 @@ export default function BookingDetailsScreen() {
       case 'assigned': return '#FF9800';
       case 'in transit': case 'picked': return '#2196F3';
       case 'delivered': case 'completed': return '#4CAF50';
+      case 'cancelled': return '#F44336';
       default: return '#999';
     }
   };
@@ -86,6 +185,12 @@ export default function BookingDetailsScreen() {
       case 'assigned': return 'Assigned';
       case 'in transit': case 'picked': return 'In Transit';
       case 'delivered': case 'completed': return 'Delivered';
+      case 'cancelled': return 'Cancelled';
+      case 'pending': return 'Booking Confirmed';
+      case 'queued': return 'Booking Confirmed';
+      case 'agent_assigned': return 'Agent Assigned';
+      case 'in_progress': return 'In Progress';
+      case 'on_the_way': return 'On the Way';
       default: return status;
     }
   };
@@ -102,10 +207,10 @@ export default function BookingDetailsScreen() {
     </View>
   );
 
-  const renderDetailRow = (label, value) => (
+  const renderDetailRow = (label, value, numberOfLines = 1) => (
     <View style={styles.detailRow}>
       <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+      <Text style={styles.detailValue} numberOfLines={numberOfLines}>{value}</Text>
     </View>
   );
 
@@ -129,12 +234,12 @@ export default function BookingDetailsScreen() {
         contentContainerStyle={styles.scrollInner}
       >
         {/* STATUS CARD - Now with extra margin top to bring it down */}
-        <View style={[styles.statusCard, { borderLeftColor: getStatusColor(booking.booking_status) }]}>
-          <View style={styles.statusCardContent}>
-            <Text style={styles.bookingNumber}>Booking #{booking.id || booking.booking_id}</Text>
-            <View style={styles.statusRow}>
-              <View style={[styles.statusDot, { backgroundColor: getStatusColor(booking.booking_status) }]} />
-              <Text style={styles.statusLabel}>{getStatusLabel(booking.booking_status)}</Text>
+        <View style={[styles.statusCard, { borderLeftColor: getStatusColor(booking.status || booking.booking_status) }]}> 
+          <View style={styles.statusCardContent}> 
+            <Text style={styles.bookingNumber}>Booking #{booking.id || booking.booking_id}</Text> 
+            <View style={styles.statusRow}> 
+              <View style={[styles.statusDot, { backgroundColor: getStatusColor(booking.status || booking.booking_status) }]} /> 
+              <Text style={styles.statusLabel}>{getStatusLabel(booking.status || booking.booking_status)}</Text> 
             </View>
           </View>
           <View style={styles.paymentBadge}>
@@ -161,7 +266,7 @@ export default function BookingDetailsScreen() {
           'Pickup Details',
           'map-marker',
           <View>
-            {renderDetailRow('Address', `${booking.pickup_address || 'N/A'}`)}
+            {renderDetailRow('Address', `${booking.pickup_address || 'N/A'}`, 2)}
             {renderDetailRow('Pincode', `${booking.pincode || 'N/A'}`)}
             {renderDetailRow('Pickup Time', `${booking.pickup_time || 'N/A'}`)}
             {booking.additional_info && renderDetailRow('Additional Info', `${booking.additional_info}`)}
@@ -174,48 +279,9 @@ export default function BookingDetailsScreen() {
           'bag-checked',
           <View>
             {renderDetailRow('Number of Bags', `${booking.bag_count || 0}`)}
-            {renderDetailRow('Total Weight', `${booking.bag_weight || 0} kg`)}
+            {renderDetailRow('Total Weight', `${String(booking.bag_weight || 0).replace(/\s*kg\s*$/i, '')} kg`)}
             {renderDetailRow('Fragile Items', `${booking.is_fragile ? 'Yes' : 'No'}`)}
             {booking.photo_proof && renderDetailRow('Photo Proof', 'Uploaded')}
-          </View>
-        )}
-
-        {/* Tracking Timeline */}
-        {renderSection(
-          'Tracking Timeline',
-          'timeline',
-          <View style={styles.timeline}>
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: '#4CAF50' }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineStatus}>Assigned</Text>
-                <Text style={styles.timelineTime}>{booking.assigned_time || 'In progress'}</Text>
-              </View>
-            </View>
-            <View style={styles.timelineLine} />
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: booking.booking_status === 'delivered' || booking.booking_status === 'picked' ? '#4CAF50' : '#DDD' }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineStatus}>Picked Up</Text>
-                <Text style={styles.timelineTime}>{booking.pickup_time || 'Pending'}</Text>
-              </View>
-            </View>
-            <View style={styles.timelineLine} />
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: booking.booking_status === 'in transit' || booking.booking_status === 'delivered' ? '#2196F3' : '#DDD' }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineStatus}>In Transit</Text>
-                <Text style={styles.timelineTime}>{booking.in_transit_time || 'Pending'}</Text>
-              </View>
-            </View>
-            <View style={styles.timelineLine} />
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: booking.booking_status === 'delivered' ? '#4CAF50' : '#DDD' }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineStatus}>Delivered</Text>
-                <Text style={styles.timelineTime}>{booking.delivered_time || 'Pending'}</Text>
-              </View>
-            </View>
           </View>
         )}
 
@@ -244,11 +310,117 @@ export default function BookingDetailsScreen() {
 
       {/* FIXED BOTTOM ACTION BAR */}
       <View style={styles.bottomButtonContainer}>
-        <TouchableOpacity style={styles.actionButton} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="phone" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Contact Support</Text>
-        </TouchableOpacity>
+        {(booking.status === 'cancelled' || booking.booking_status === 'cancelled') ? (
+          <View style={styles.cancelledNotice}>
+            <MaterialCommunityIcons name="information-outline" size={20} color="#F44336" />
+            <Text style={styles.cancelledNoticeText}>This booking has been cancelled</Text>
+          </View>
+        ) : isCancellable() ? (
+          <View style={styles.buttonRow}>
+            <TouchableOpacity 
+              style={[styles.actionButton, { flex: 1, marginRight: 8 }]} 
+              activeOpacity={0.8} 
+              onPress={handleTrackBooking}
+            >
+              <MaterialCommunityIcons name="map-marker-path" size={20} color="white" />
+              <Text style={styles.actionButtonText}>Track</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.cancelButton, { flex: 1 }]} 
+              activeOpacity={0.8} 
+              onPress={handleCancelClick}
+            >
+              <MaterialCommunityIcons name="close-circle-outline" size={20} color="white" />
+              <Text style={styles.actionButtonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.actionButton} activeOpacity={0.8} onPress={handleTrackBooking}>
+            <MaterialCommunityIcons name="map-marker-path" size={20} color="white" />
+            <Text style={styles.actionButtonText}>
+              {(booking.status === 'completed' || booking.booking_status === 'completed' || booking.status === 'on_the_way' || booking.booking_status === 'on_the_way') ? 'View Delivery Details' : 'Track Booking'}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* Cancellation Breakdown Modal */}
+      <Modal
+        visible={cancellationModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => !cancelling && setCancellationModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => !cancelling && setCancellationModalVisible(false)}
+            >
+              <MaterialCommunityIcons name="close" size={24} color="#1A1C1E" />
+            </TouchableOpacity>
+
+            <Text style={styles.modalTitle}>Cancel Booking?</Text>
+
+            <ScrollView style={styles.breakdownScroll} showsVerticalScrollIndicator={false}>
+              <View style={styles.breakdownSection}>
+                <Text style={styles.breakdownLabel}>Booking Details</Text>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownKey}>Booking ID</Text>
+                  <Text style={styles.breakdownValue}>#{booking.id || booking.booking_id}</Text>
+                </View>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownKey}>Status</Text>
+                  <Text style={styles.breakdownValue}>{getStatusLabel(booking.status || booking.booking_status)}</Text>
+                </View>
+              </View>
+
+              <View style={styles.breakdownSection}>
+                <Text style={styles.breakdownLabel}>Refund Breakdown</Text>
+                <View style={styles.breakdownRow}>
+                  <Text style={styles.breakdownKey}>Total Amount Paid</Text>
+                  <Text style={styles.breakdownValue}>₹{booking.amount || 0}</Text>
+                </View>
+                <View style={[styles.breakdownRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                  <Text style={styles.breakdownKey}>Cancellation Fee</Text>
+                  <Text style={styles.breakdownValue}>₹{booking.cancellation_fee || 0}</Text>
+                </View>
+                <View style={styles.breakdownDivider} />
+                <View style={[styles.breakdownRow, { paddingTop: 12 }]}>
+                  <Text style={styles.breakdownKeyBold}>Refund Amount</Text>
+                  <Text style={styles.breakdownValueBold}>₹{Math.max((booking.refund_amount || (booking.amount || 0) - (booking.cancellation_fee || 0)), 0)}</Text>
+                </View>
+              </View>
+
+              <View style={styles.warningBox}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#FF6600" />
+                <Text style={styles.warningText}>This action cannot be undone. Are you sure you want to cancel this booking?</Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalButtonRow}>
+              <TouchableOpacity
+                style={styles.modalButtonSecondary}
+                onPress={() => !cancelling && setCancellationModalVisible(false)}
+                disabled={cancelling}
+              >
+                <Text style={styles.modalButtonSecondaryText}>Keep Booking</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButtonPrimary, cancelling && { opacity: 0.6 }]}
+                onPress={confirmCancellation}
+                disabled={cancelling}
+              >
+                {cancelling ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text style={styles.modalButtonPrimaryText}>Confirm Cancellation</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -329,10 +501,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6'
+    borderBottomColor: '#F3F4F6',
+    alignItems: 'flex-start'
   },
-  detailLabel: { fontSize: 13, color: '#666', fontWeight: '600' },
-  detailValue: { fontSize: 13, fontWeight: '700', color: '#1A1C1E' },
+  detailLabel: { fontSize: 13, color: '#666', fontWeight: '600', flex: 0.35 },
+  detailValue: { fontSize: 13, fontWeight: '700', color: '#1A1C1E', flex: 0.65, flexWrap: 'wrap', textAlign: 'right' },
   timeline: { paddingVertical: 4 },
   timelineItem: { flexDirection: 'row', marginBottom: 4 },
   timelineDot: { width: 14, height: 14, borderRadius: 7, marginTop: 3, marginRight: 12 },
@@ -349,6 +522,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB'
   },
+  buttonRow: {
+    flexDirection: 'row',
+    width: '100%'
+  },
   actionButton: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -361,5 +538,155 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4
   },
-  actionButtonText: { color: 'white', fontSize: 16, fontWeight: '700', marginLeft: 10 }
+  cancelButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F44336',
+    borderRadius: 12,
+    paddingVertical: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4
+  },
+  actionButtonText: { color: 'white', fontSize: 14, fontWeight: '700', marginLeft: 8 },
+  cancelledNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFEBEE',
+    borderRadius: 12,
+    paddingVertical: 14,
+    borderWidth: 1,
+    borderColor: '#F44336'
+  },
+  cancelledNoticeText: {
+    color: '#F44336',
+    fontSize: 14,
+    fontWeight: '700',
+    marginLeft: 8
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end'
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 24,
+    maxHeight: '85%'
+  },
+  modalCloseButton: {
+    alignSelf: 'flex-end',
+    padding: 8,
+    marginRight: -8,
+    marginTop: -8
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1A1C1E',
+    marginBottom: 20
+  },
+  breakdownScroll: {
+    maxHeight: 300,
+    marginBottom: 16
+  },
+  breakdownSection: {
+    marginBottom: 16
+  },
+  breakdownLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#999',
+    textTransform: 'uppercase',
+    marginBottom: 8
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6'
+  },
+  breakdownKey: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500'
+  },
+  breakdownKeyBold: {
+    fontSize: 14,
+    color: '#1A1C1E',
+    fontWeight: '700'
+  },
+  breakdownValue: {
+    fontSize: 13,
+    color: '#1A1C1E',
+    fontWeight: '600'
+  },
+  breakdownValueBold: {
+    fontSize: 16,
+    color: '#4CAF50',
+    fontWeight: '800'
+  },
+  breakdownDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 4
+  },
+  warningBox: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF3E0',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#FFB74D'
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#E65100',
+    fontWeight: '600',
+    marginLeft: 8,
+    flex: 1,
+    lineHeight: 18
+  },
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 12
+  },
+  modalButtonSecondary: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  modalButtonSecondaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#666'
+  },
+  modalButtonPrimary: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#F44336',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  modalButtonPrimaryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'white'
+  }
 });
+

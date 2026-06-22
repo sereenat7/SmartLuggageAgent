@@ -47,9 +47,15 @@ const formatDate = (date) => {
   if (typeof date === 'string') {
     // If already in YYYY-MM-DD format, return as is
     if (date.match(/^\d{4}-\d{2}-\d{2}$/)) return date;
+    // Handle DD/MM/YYYY from the frontend (en-GB locale)
+    if (date.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+      const [day, month, year] = date.split('/');
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
     // Try to parse and reformat
     try {
       const d = new Date(date);
+      if (Number.isNaN(d.getTime())) return null;
       return d.toISOString().split('T')[0];
     } catch (e) {
       return null;
@@ -114,6 +120,55 @@ const formatTime = (time) => {
     }
   }
   return null;
+};
+
+const TRACKING_STATUSES = {
+  pending: 'pending',
+  agent_assigned: 'agent_assigned',
+  in_progress: 'in_progress',
+  on_the_way: 'on_the_way',
+  completed: 'completed',
+};
+
+const normalizeTrackingValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
+
+const buildTrackingQrPayload = (booking, qrType) => {
+  const bookingId = booking?.id;
+  const phone = normalizeTrackingValue(booking?.phone || booking?.user_phone || '');
+  const pickupAddress = normalizeTrackingValue(booking?.pickup_address || booking?.pickupAddress || '');
+  const dropAddress = normalizeTrackingValue(booking?.drop_address || booking?.dropAddress || '');
+  const pickupTime = normalizeTrackingValue(booking?.pickup_time || booking?.timeSlot || '');
+  const target = qrType === 'delivery' ? dropAddress : pickupAddress;
+
+  return `SL|${bookingId}|${qrType}|${target}|${phone}|${pickupTime}`;
+};
+
+const attachTrackingQr = (booking) => ({
+  ...booking,
+  tracking_qr: {
+    pickup: buildTrackingQrPayload(booking, 'pickup'),
+    delivery: buildTrackingQrPayload(booking, 'delivery'),
+  },
+});
+
+const sendUpdatedBooking = (res, bookingId, prefix, logLabel) => {
+  db.query('SELECT * FROM bookings WHERE id = ?', [bookingId], (err2, rows) => {
+    if (err2 || !rows.length) {
+      console.error(`${prefix} Failed to fetch updated booking:`, err2);
+      return res.status(500).json({ success: false, message: 'Booking updated but fetch failed' });
+    }
+
+    const booking = attachTrackingQr(rows[0]);
+    console.log(`${prefix} ${logLabel}:`, { bookingId, status: booking.status });
+    return res.json({ success: true, booking });
+  });
+};
+
+const isTrackingQrMatch = (booking, qrType, qrValue) => {
+  const expected = buildTrackingQrPayload(booking, qrType);
+  const received = String(qrValue || '').trim();
+  if (!received) return false;
+  return received === expected;
 };
 
 const VEHICLE_WEIGHT_MAP = {
@@ -264,6 +319,7 @@ const queueBookingForAgentDashboard = (bookingId, phone) =>
         WHERE b.id = ?
       `;
 
+
       db.query(bestAgentSql, [bookingId], (bestErr, rows) => {
         if (bestErr) return reject(bestErr);
 
@@ -365,6 +421,7 @@ const queueBookingForAgentDashboard = (bookingId, phone) =>
             db.query(
               `UPDATE bookings
                SET assigned_agent_id = ?,
+                    assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP),
                    assignment_due_at = COALESCE(?, assignment_due_at),
                    agent_eta_minutes = ?,
                    agent_leave_by_at = ?,
@@ -409,7 +466,7 @@ const queueBookingForAgentDashboard = (bookingId, phone) =>
         if (queueErr) return reject(queueErr);
 
         db.query(
-          `UPDATE bookings SET status = 'queued', assignment_status = 'queued' WHERE id = ?`,
+          `UPDATE bookings SET status = 'queued', assignment_status = 'queued', assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP) WHERE id = ?`,
           [bookingId],
           (bookingErr) => {
             if (bookingErr) return reject(bookingErr);
@@ -442,8 +499,26 @@ const verifyToken = (req, res, next) => {
   }
 };
 
+const getUserIdByPhone = (phone) =>
+  new Promise((resolve, reject) => {
+    const variants = getPhoneVariants(phone);
+    if (!variants.length) {
+      return resolve(null);
+    }
+
+    const placeholders = variants.map(() => '?').join(',');
+    db.query(
+      `SELECT id FROM users WHERE phone IN (${placeholders}) ORDER BY id DESC LIMIT 1`,
+      variants,
+      (err, rows) => {
+        if (err) return reject(err);
+        resolve(rows?.[0]?.id ?? null);
+      }
+    );
+  });
+
 // Create booking
-router.post("/create", verifyToken, (req, res) => {
+router.post("/create", verifyToken, async (req, res) => {
   const {
     username,
     isInternational, 
@@ -493,20 +568,26 @@ router.post("/create", verifyToken, (req, res) => {
 
   console.log('DEBUG: Creating booking for phone:', req.phone);
   try {
+    const userId = await getUserIdByPhone(req.phone);
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User account not found for booking' });
+    }
+
     const query = `
       INSERT INTO bookings (
-        phone, username, is_international, is_domestic, airline_name, flight_number, terminal,
+        user_id, phone, username, is_international, is_domestic, airline_name, flight_number, terminal,
         departure_city, departure_airport, arrival_city, arrival_airport, departure_date, departure_time, arrival_date, arrival_time,
         bag_count, bag_weight, is_fragile, is_checkin, pincode, 
         pickup_address, pickup_latitude, pickup_longitude, pickup_time,
         drop_address, drop_latitude, drop_longitude,
         photos, additional_info, assignment_due_at, assignment_status, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     db.query(
       query,
       [
+        userId,
         req.phone,
         username,
         isInternational ? 1 : 0, 
@@ -891,6 +972,480 @@ router.patch("/delivered/:bookingId", (req, res) => {
         });
       });
     });
+  });
+});
+
+// === SIMPLIFIED BOOKING FLOW ===
+
+// Accept booking - agent accepts a booking and gets assigned
+router.patch('/accept/:bookingId', (req, res) => {
+  const { bookingId } = req.params;
+  const { agentId } = req.body;
+
+  if (!bookingId || !agentId) {
+    return res.status(400).json({ success: false, message: 'Missing bookingId or agentId' });
+  }
+
+  const query = `
+    UPDATE bookings 
+    SET status = 'agent_assigned', 
+        assigned_agent_id = ?,
+        assignment_status = 'agent_assigned',
+        assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP)
+    WHERE id = ?
+  `;
+
+  db.query(query, [agentId, bookingId], (err, result) => {
+    if (err) {
+      console.error('[BookingAccept] DB error:', err);
+      return res.status(500).json({ success: false, message: 'Failed to accept booking' });
+    }
+
+    if (!result.affectedRows) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    sendUpdatedBooking(res, bookingId, '[BookingAccept]', 'Booking assigned to agent');
+  });
+});
+
+router.patch('/start/:bookingId', (req, res) => {
+  const { bookingId } = req.params;
+
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: 'Missing bookingId' });
+  }
+
+  const query = `
+    UPDATE bookings
+    SET status = 'in_progress',
+        assignment_status = 'in_progress',
+        pickup_started_at = COALESCE(pickup_started_at, CURRENT_TIMESTAMP)
+    WHERE id = ?
+  `;
+
+  db.query(query, [bookingId], (err, result) => {
+    if (err) {
+      console.error('[BookingStart] DB error:', err);
+      return res.status(500).json({ success: false, message: 'Failed to start task' });
+    }
+
+    if (!result.affectedRows) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    sendUpdatedBooking(res, bookingId, '[BookingStart]', 'Booking marked in_progress');
+  });
+});
+
+router.post('/verify-qr/:bookingId', (req, res) => {
+  const { bookingId } = req.params;
+  const { qrType, qrValue } = req.body || {};
+
+  if (!bookingId || !qrType || !qrValue) {
+    return res.status(400).json({ success: false, message: 'Missing bookingId, qrType, or qrValue' });
+  }
+
+  const normalizedType = normalizeTrackingValue(qrType);
+  if (!['pickup', 'delivery'].includes(normalizedType)) {
+    return res.status(400).json({ success: false, message: 'Invalid QR type' });
+  }
+
+  db.query('SELECT * FROM bookings WHERE id = ?', [bookingId], (err, rows) => {
+    if (err) {
+      console.error('[BookingQR] DB error:', err);
+      return res.status(500).json({ success: false, message: 'Failed to verify QR' });
+    }
+
+    const booking = rows?.[0];
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const currentStatus = normalizeTrackingValue(booking.status);
+    if (normalizedType === 'pickup' && currentStatus !== TRACKING_STATUSES.in_progress) {
+      return res.status(409).json({ success: false, message: 'Pickup QR can only be verified in_progress' });
+    }
+    if (normalizedType === 'delivery' && currentStatus !== TRACKING_STATUSES.on_the_way) {
+      return res.status(409).json({ success: false, message: 'Delivery QR can only be verified on_the_way' });
+    }
+
+    if (!isTrackingQrMatch(booking, normalizedType, qrValue)) {
+      return res.status(400).json({ success: false, message: 'Invalid QR code' });
+    }
+
+    const nextStatus = normalizedType === 'pickup' ? TRACKING_STATUSES.on_the_way : TRACKING_STATUSES.completed;
+    const updateQuery = normalizedType === 'pickup'
+      ? `
+        UPDATE bookings
+        SET status = '${TRACKING_STATUSES.on_the_way}',
+            assignment_status = '${TRACKING_STATUSES.on_the_way}',
+            pickup_completed_at = COALESCE(pickup_completed_at, CURRENT_TIMESTAMP)
+        WHERE id = ?
+      `
+      : `
+        UPDATE bookings
+        SET status = '${TRACKING_STATUSES.completed}',
+            assignment_status = '${TRACKING_STATUSES.completed}',
+            delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
+        WHERE id = ?
+      `;
+
+    db.query(updateQuery, [bookingId], (updateErr, result) => {
+      if (updateErr) {
+        console.error('[BookingQR] Update error:', updateErr);
+        return res.status(500).json({ success: false, message: 'Failed to update status after QR verification' });
+      }
+
+      if (!result.affectedRows) {
+        return res.status(404).json({ success: false, message: 'Booking not found' });
+      }
+
+      sendUpdatedBooking(res, bookingId, '[BookingQR]', `QR verified and status updated to ${nextStatus}`);
+    });
+  });
+});
+
+// Mark booking as picked up
+router.patch('/pickup/:bookingId', (req, res) => {
+  const { bookingId } = req.params;
+
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: 'Missing bookingId' });
+  }
+
+  const query = `
+    UPDATE bookings 
+    SET status = 'picked_up',
+        assignment_status = 'picked_up',
+        pickup_completed_at = COALESCE(pickup_completed_at, CURRENT_TIMESTAMP)
+    WHERE id = ?
+  `;
+
+  db.query(query, [bookingId], (err, result) => {
+    if (err) {
+      console.error('[BookingPickup] DB error:', err);
+      return res.status(500).json({ success: false, message: 'Failed to update pickup status' });
+    }
+
+    if (!result.affectedRows) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    sendUpdatedBooking(res, bookingId, '[BookingPickup]', 'Booking marked as picked_up');
+  });
+});
+
+// Mark booking as delivered
+router.patch('/delivered/:bookingId', (req, res) => {
+  const { bookingId } = req.params;
+
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: 'Missing bookingId' });
+  }
+
+  const query = `
+    UPDATE bookings 
+    SET status = 'delivered',
+        assignment_status = 'delivered',
+        delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
+    WHERE id = ?
+  `;
+
+  db.query(query, [bookingId], (err, result) => {
+    if (err) {
+      console.error('[BookingDelivered] DB error:', err);
+      return res.status(500).json({ success: false, message: 'Failed to update delivery status' });
+    }
+
+    if (!result.affectedRows) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    sendUpdatedBooking(res, bookingId, '[BookingDelivered]', 'Booking marked as delivered');
+  });
+});
+
+// Cancel booking endpoint - supports different cancellation flows based on booking status
+router.post('/cancel/:bookingId', verifyToken, (req, res) => {
+  const { bookingId } = req.params;
+  const phone = req.phone;
+  const { reason } = req.body || {};
+
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: 'Missing bookingId' });
+  }
+
+  // Fetch the booking
+  const bookingQuery = 'SELECT * FROM bookings WHERE id = ? AND phone = ?';
+  db.query(bookingQuery, [bookingId, phone], (err, rows) => {
+    if (err) {
+      console.error('[BookingCancel] DB error:', err);
+      return res.status(500).json({ success: false, message: 'Failed to fetch booking' });
+    }
+
+    if (!rows || !rows.length) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const booking = rows[0];
+    const currentStatus = ((booking.status || booking.booking_status) || '').toLowerCase();
+    const currentAssignmentStatus = ((booking.assignment_status || '') || '').toLowerCase();
+
+    // Block cancellation for certain statuses
+    if (
+      currentStatus === 'on_the_way' || currentStatus === 'completed' || currentStatus === 'cancelled' ||
+      currentAssignmentStatus === 'on_the_way' || currentAssignmentStatus === 'completed' || currentAssignmentStatus === 'cancelled'
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot cancel booking in ${currentStatus || currentAssignmentStatus} status`,
+        cancellable: false
+      });
+    }
+
+    // Calculate cancellation fee and refund based on status
+    let cancellationFee = 0;
+    let refundAmount = booking.amount || 0;
+    let cancellationDistance = 0;
+    let breakdownDetails = null;
+
+    const totalAmount = booking.amount || 0;
+
+    if (currentStatus === 'pending' || currentStatus === 'queued') {
+      // Booking Confirmed - within 2 minutes of creation
+      const createdAt = new Date(booking.created_at).getTime();
+      const now = Date.now();
+      const minutesElapsed = (now - createdAt) / (1000 * 60);
+
+      if (minutesElapsed > 2) {
+        return res.status(400).json({
+          success: false,
+          message: 'Booking can only be cancelled within 2 minutes of creation',
+          cancellable: false,
+          minutesElapsed: Math.floor(minutesElapsed)
+        });
+      }
+
+      cancellationFee = 0;
+      refundAmount = totalAmount;
+      breakdownDetails = {
+        status: 'Booking Confirmed',
+        timeSinceCreation: `${minutesElapsed.toFixed(1)} minutes`,
+        distanceTravelled: '0 km',
+        cancellationFeeFormula: '₹0',
+        cancellationFee: 0,
+        totalAmountPaid: totalAmount,
+        refundAmount: refundAmount
+      };
+    } else if (currentStatus === 'agent_assigned') {
+      // Agent Assigned - calculate distance travelled
+      const agentId = booking.assigned_agent_id;
+
+      if (!agentId) {
+        cancellationFee = 0;
+        refundAmount = Math.max(totalAmount - cancellationFee, 0);
+        breakdownDetails = {
+          status: 'Agent Assigned',
+          distanceTravelled: '0 km',
+          cancellationFeeFormula: '₹0',
+          cancellationFee: 0,
+          totalAmountPaid: totalAmount,
+          refundAmount: refundAmount
+        };
+      } else {
+        // Fetch agent's current location
+        const agentQuery = 'SELECT latitude, longitude FROM support_agents WHERE agent_id = ?';
+        db.query(agentQuery, [agentId], (agentErr, agentRows) => {
+          if (agentErr || !agentRows || !agentRows.length) {
+            cancellationFee = 0;
+            refundAmount = Math.max(totalAmount - cancellationFee, 0);
+            return finalizeCancellation({
+              distanceTravelled: 0,
+              distanceKm: 0,
+              cancellationFee,
+              refundAmount,
+              breakdownDetails: {
+                status: 'Agent Assigned',
+                distanceTravelled: '0 km',
+                cancellationFeeFormula: '₹0',
+                cancellationFee,
+                totalAmountPaid: totalAmount,
+                refundAmount
+              }
+            });
+          }
+
+          const agent = agentRows[0];
+          const agentLat = agent.latitude;
+          const agentLng = agent.longitude;
+          const pickupLat = booking.pickup_latitude;
+          const pickupLng = booking.pickup_longitude;
+
+          if (!agentLat || !agentLng || !pickupLat || !pickupLng) {
+            cancellationFee = 0;
+            refundAmount = Math.max(totalAmount - cancellationFee, 0);
+            return finalizeCancellation({
+              distanceTravelled: 0,
+              distanceKm: 0,
+              cancellationFee,
+              refundAmount,
+              breakdownDetails: {
+                status: 'Agent Assigned',
+                distanceTravelled: '0 km',
+                cancellationFeeFormula: '₹0',
+                cancellationFee,
+                totalAmountPaid: totalAmount,
+                refundAmount
+              }
+            });
+          }
+
+          // Calculate distance between agent and pickup location
+          const distanceKm = haversineKm(agentLat, agentLng, pickupLat, pickupLng);
+          cancellationDistance = distanceKm;
+
+          cancellationFee = Math.round(distanceKm * 10);
+          if (cancellationFee < 0) cancellationFee = 0;
+          refundAmount = Math.max(totalAmount - cancellationFee, 0);
+
+          breakdownDetails = {
+            status: 'Agent Assigned',
+            distanceTravelled: `${distanceKm.toFixed(2)} km`,
+            cancellationFeeFormula: `₹10 × ${distanceKm.toFixed(2)} km`,
+            cancellationFee: cancellationFee,
+            totalAmountPaid: totalAmount,
+            refundAmount: refundAmount
+          };
+
+          finalizeCancellation({
+            distanceTravelled: distanceKm,
+            distanceKm: distanceKm,
+            cancellationFee,
+            refundAmount,
+            breakdownDetails
+          });
+        });
+        return;
+      }
+    } else if (currentStatus === 'in_progress') {
+      // Agent has reached pickup location
+      cancellationFee = 150;
+      refundAmount = Math.max(totalAmount - cancellationFee, 0);
+      cancellationDistance = 0; // Already reached location
+
+      breakdownDetails = {
+        status: 'In Progress',
+        distanceTravelled: '0 km',
+        cancellationFeeFormula: '₹150',
+        cancellationFee: cancellationFee,
+        totalAmountPaid: totalAmount,
+        refundAmount: refundAmount
+      };
+    }
+
+    // If we reach here for 'pending', 'queued', 'in_progress', or agent_assigned with no agent data, finalize
+    if (currentStatus === 'pending' || currentStatus === 'queued' || currentStatus === 'in_progress' ||
+        (currentStatus === 'agent_assigned' && !booking.assigned_agent_id)) {
+      finalizeCancellation({
+        distanceTravelled: cancellationDistance,
+        distanceKm: cancellationDistance,
+        cancellationFee,
+        refundAmount,
+        breakdownDetails
+      });
+    }
+
+    // Helper function to finalize cancellation
+    function finalizeCancellation(details) {
+      const cancelQuery = `
+        UPDATE bookings 
+        SET status = 'cancelled',
+            assignment_status = 'cancelled',
+            cancellation_fee = ?,
+            refund_amount = ?,
+            cancellation_distance = ?,
+            cancelled_by = 'customer',
+            cancellation_reason = ?,
+            cancelled_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `;
+
+      db.query(
+        cancelQuery,
+        [
+          details.cancellationFee,
+          details.refundAmount,
+          details.distanceTravelled,
+          reason || 'Customer initiated cancellation',
+          bookingId
+        ],
+        (cancelErr, cancelResult) => {
+          if (cancelErr) {
+            console.error('[BookingCancel] Update error:', cancelErr);
+            return res.status(500).json({ success: false, message: 'Failed to cancel booking' });
+          }
+
+          if (!cancelResult.affectedRows) {
+            return res.status(404).json({ success: false, message: 'Booking not found' });
+          }
+
+          // Remove any pending queue request for this booking so the agent request disappears.
+          db.query('DELETE FROM agent_queue WHERE booking_id = ?', [bookingId], (queueErr) => {
+            if (queueErr) {
+              console.warn('[BookingCancel] Failed to remove booking from agent queue:', queueErr);
+            } else {
+              console.log('[BookingCancel] Removed booking', bookingId, 'from agent queue');
+            }
+          });
+
+          // If there's an assigned agent, set their status back to Available
+          if (booking.assigned_agent_id) {
+            const agentUpdateQuery = `
+              UPDATE support_agents 
+              SET status = 'available', current_user_id = NULL
+              WHERE agent_id = ?
+            `;
+            db.query(agentUpdateQuery, [booking.assigned_agent_id], (agentErr) => {
+              if (agentErr) {
+                console.warn('[BookingCancel] Failed to update agent status:', agentErr);
+              } else {
+                console.log('[BookingCancel] Agent', booking.assigned_agent_id, 'status set back to available');
+              }
+            });
+          }
+
+          // Fetch and return updated booking
+          db.query('SELECT * FROM bookings WHERE id = ?', [bookingId], (err2, rows2) => {
+            if (err2 || !rows2 || !rows2.length) {
+              console.error('[BookingCancel] Failed to fetch updated booking:', err2);
+              return res.status(500).json({
+                success: true,
+                message: 'Booking cancelled successfully',
+                bookingId,
+                cancellationDetails: {
+                  cancellationFee: details.cancellationFee,
+                  refundAmount: details.refundAmount,
+                  breakdown: details.breakdownDetails
+                }
+              });
+            }
+
+            const updatedBooking = attachTrackingQr(rows2[0]);
+            res.json({
+              success: true,
+              message: 'Booking cancelled successfully',
+              booking: updatedBooking,
+              cancellationDetails: {
+                cancellationFee: details.cancellationFee,
+                refundAmount: details.refundAmount,
+                breakdown: details.breakdownDetails
+              }
+            });
+          });
+        }
+      );
+    }
   });
 });
 
