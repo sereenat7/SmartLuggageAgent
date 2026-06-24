@@ -38,6 +38,7 @@ export default function DashboardScreen({ navigation, route }) {
   const [inboxError, setInboxError] = useState('');
   const [waitingRequests, setWaitingRequests] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
+  const [completedSessions, setCompletedSessions] = useState([]);
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [locationLabel, setLocationLabel] = useState('Location not synced');
   const [locationSyncStatus, setLocationSyncStatus] = useState('idle');
@@ -158,12 +159,14 @@ export default function DashboardScreen({ navigation, route }) {
           });
         setWaitingRequests(enrichWaitingWithEta(normalizeRequestCoords(data.waiting)));
         setActiveSessions(normalizeRequestCoords(data.activeSessions));
+        setCompletedSessions(normalizeRequestCoords(data.completedSessions || []));
       } else {
         throw new Error(data.message || `Inbox request failed (${resp.status})`);
       }
     } catch (error) {
       setWaitingRequests([]);
       setActiveSessions([]);
+      setCompletedSessions([]);
       if (error.name === 'AbortError') {
         setInboxError('Request timed out. Check user backend on port 5000.');
       } else {
@@ -312,6 +315,7 @@ export default function DashboardScreen({ navigation, route }) {
   const getTaskCount = (status) => {
     if (status === 'assigned') return waitingRequests.length;
     if (status === 'in-progress') return activeSessions.length + tasks.filter(task => task.status === status).length;
+    if (status === 'completed') return completedSessions.length + tasks.filter(task => task.status === status).length;
     return tasks.filter(task => task.status === status).length;
   };
 
@@ -516,7 +520,17 @@ export default function DashboardScreen({ navigation, route }) {
               )}
             </>
           ) : (
-            filteredTasks.length > 0 ? (
+            completedSessions.length > 0 ? (
+              completedSessions.map((session) => (
+                <CompletedSessionCard
+                  key={session.sessionId}
+                  session={session}
+                  onViewTask={() => navigation.navigate('TaskDetails', {
+                    task: buildTaskFromSession(session),
+                  })}
+                />
+              ))
+            ) : filteredTasks.length > 0 ? (
               filteredTasks.map(task => (
                 <TaskCard
                   key={task.id}
@@ -663,6 +677,57 @@ function InProgressSessionCard({ session, onViewTask }) {
 
       <Text style={styles.requestDescription}>
         Assigned to {session.agentName || 'Agent'} and currently in progress.
+      </Text>
+
+      {tripSummary ? <Text style={styles.requestMeta}>{tripSummary}</Text> : null}
+      {routeSummary ? <Text style={styles.requestMeta}>{routeSummary}</Text> : null}
+      {session.pickupLocation ? <Text style={styles.requestMeta}>📍 {session.pickupLocation}</Text> : null}
+      {session.dropLocation ? <Text style={styles.requestMeta}>To: {session.dropLocation}</Text> : null}
+      {luggageSummary ? <Text style={styles.requestMeta}>Luggage: {luggageSummary}</Text> : null}
+      {session.additionalInfo ? <Text style={styles.requestMeta}>Notes: {session.additionalInfo}</Text> : null}
+
+      <TouchableOpacity style={styles.viewTaskButton} onPress={onViewTask} activeOpacity={0.9}>
+        <LinearGradient colors={BrandGradient} style={styles.viewTaskGradient}>
+          <Text style={styles.viewTaskText}>View Details</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function CompletedSessionCard({ session, onViewTask }) {
+  const tripSummary = [
+    session.airlineName ? session.airlineName : null,
+    session.flightNumber ? `Flight ${session.flightNumber}` : null,
+    session.terminal ? `Terminal ${session.terminal}` : null,
+  ].filter(Boolean).join(' • ');
+
+  const routeSummary = [
+    session.departureCity ? `From ${session.departureCity}` : null,
+    session.arrivalCity ? `To ${session.arrivalCity}` : null,
+    (session.timeSlot || session.pickupTime) ? `Pickup ${session.timeSlot || session.pickupTime}` : null,
+  ].filter(Boolean).join(' • ');
+
+  const luggageSummary = [
+    session.luggage ? `${session.luggage} bag${Number(session.luggage) === 1 ? '' : 's'}` : null,
+    session.bagWeight ? session.bagWeight : null,
+  ].filter(Boolean).join(' • ');
+
+  return (
+    <View style={styles.requestCard}>
+      <View style={styles.requestHeader}>
+        <View style={styles.requestAvatar}>
+          <Text style={styles.requestAvatarText}>{(session.userName || 'U').charAt(0)}</Text>
+        </View>
+        <View style={styles.requestInfo}>
+          <Text style={styles.requestName}>{session.userName || 'Unknown user'}</Text>
+          <Text style={styles.requestMeta}>{session.userPhone || 'No phone'}</Text>
+        </View>
+        <Text style={[styles.requestStatus, styles.completedStatus]}>Completed</Text>
+      </View>
+
+      <Text style={styles.requestDescription}>
+        Luggage successfully delivered by {session.agentName || 'Agent'}.
       </Text>
 
       {tripSummary ? <Text style={styles.requestMeta}>{tripSummary}</Text> : null}
@@ -886,6 +951,7 @@ const styles = StyleSheet.create({
   requestName: { fontSize: 14, fontWeight: '600', color: Colors.textPrimary },
   requestMeta: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
   requestStatus: { backgroundColor: '#FFF3E8', color: Colors.buttonPrimary, fontSize: 11, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  completedStatus: { backgroundColor: '#E8FFF2', color: '#10B981' },
   requestDescription: { fontSize: 13, color: Colors.textSecondary, lineHeight: 19, marginBottom: 12 },
   requestTimingMeta: { fontSize: 12, color: '#0E7A43', fontWeight: '600', marginTop: 2, marginBottom: 6 },
   requestUrgency: { fontSize: 12, color: '#C2410C', fontWeight: '700', marginBottom: 10 },

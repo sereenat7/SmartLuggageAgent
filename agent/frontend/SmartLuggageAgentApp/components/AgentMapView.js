@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View, Text } from 'react-native';
 import Constants from 'expo-constants';
 import { WebView } from 'react-native-webview';
+import { Ionicons } from '@expo/vector-icons';
 import { BRAND_ORANGE } from '../constants/colors';
 
 const isExpoGo =
@@ -18,7 +19,6 @@ const buildLeafletHtml = ({ agentLocation, customerLocation, routeCoordinates, e
   const path = (routeCoordinates || [])
     .map((p) => `[${p.latitude}, ${p.longitude}]`)
     .join(',');
-  const etaLabel = Number.isFinite(etaMinutes) ? `ETA ${etaMinutes} MIN` : 'ETA --';
 
   return `<!DOCTYPE html>
 <html>
@@ -28,60 +28,63 @@ const buildLeafletHtml = ({ agentLocation, customerLocation, routeCoordinates, e
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     html, body, #map { margin:0; padding:0; height:100%; width:100%; }
-    .eta-badge {
-      position: absolute; z-index: 1000; top: 42%; left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(255,255,255,0.95); padding: 8px 14px;
-      border-radius: 8px; font: 800 13px Arial, sans-serif; color: #111827;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-    }
-    .marker-label {
-      background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
-      padding: 4px 8px; font: 700 11px Arial, sans-serif; color: #111827;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1); margin-bottom: 4px; text-align: center;
-    }
-    .marker-dot {
-      width: 16px; height: 16px; border-radius: 50%; background: #fff;
-      border: 4px solid ${BRAND_ORANGE}; margin: 0 auto;
-      box-shadow: 0 0 0 6px rgba(255,102,0,0.25);
+    .agent-marker-ping {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #2563eb;
+      border: 3px solid #fff;
+      box-shadow: 0 0 0 6px rgba(37,99,235,0.25);
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
-  <div class="eta-badge">${etaLabel}</div>
   <script>
     const agent = ${agent};
     const customer = ${customer};
     const path = [${path}];
-    const map = L.map('map', { zoomControl: false });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; OpenStreetMap'
+    const map = L.map('map', { 
+      zoomControl: false,
+      preferCanvas: true,
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+      wheelDebounceTime: 40
+    });
+    L.tileLayer('https://maps.geoapify.com/v1/tile/osm-liberty/{z}/{x}/{y}.png?apiKey=6a6f5450f3164727b88686b4a5a0fffd', {
+      attribution: '© OpenStreetMap contributors | Geoapify',
+      maxZoom: 20,
+      maxNativeZoom: 19,
+      detectRetina: true
     }).addTo(map);
 
     const points = [];
-    function markerHtml(title, sub) {
-      return '<div><div class="marker-label">' + title + '<br/><span style="font-size:9px;color:#64748b">' + sub + '</span></div><div class="marker-dot"></div></div>';
-    }
 
     if (customer) {
-      const m1 = L.marker(customer, {
-        icon: L.divIcon({ className: '', html: markerHtml('CUSTOMER', '(Pickup)'), iconSize: [90, 50], iconAnchor: [45, 50] })
-      }).addTo(map);
+      const customerIcon = L.divIcon({
+        className: '',
+        html: '<div style="position:relative;width:30px;height:40px;margin-top:-20px;"><svg width="30" height="40" viewBox="0 0 30 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15 0C6.71573 0 0 6.71573 0 15C0 26.25 15 40 15 40C15 40 30 26.25 30 15C30 6.71573 23.2843 0 15 0Z" fill="#2563eb"/><circle cx="15" cy="15" r="6" fill="#ffffff"/><circle cx="15" cy="15" r="3" fill="#2563eb"/></svg></div>',
+        iconSize: [30, 40],
+        iconAnchor: [15, 40]
+      });
+      const m1 = L.marker(customer, { icon: customerIcon }).addTo(map);
       points.push(customer);
     }
     if (agent) {
-      const m2 = L.marker(agent, {
-        icon: L.divIcon({ className: '', html: markerHtml('YOU', '(Agent)'), iconSize: [80, 50], iconAnchor: [40, 50] })
-      }).addTo(map);
+      const agentIcon = L.divIcon({
+        className: '',
+        html: '<div class="agent-marker-ping"></div>',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12]
+      });
+      const m2 = L.marker(agent, { icon: agentIcon }).addTo(map);
       points.push(agent);
     }
     if (path.length >= 2) {
-      L.polyline(path, { color: '${BRAND_ORANGE}', weight: 5, opacity: 0.9 }).addTo(map);
+      L.polyline(path, { color: '#2563eb', weight: 5, opacity: 0.9 }).addTo(map);
       points.push(...path);
     } else if (agent && customer) {
-      L.polyline([agent, customer], { color: '${BRAND_ORANGE}', weight: 5, opacity: 0.9, dashArray: '6 8' }).addTo(map);
+      L.polyline([agent, customer], { color: '#2563eb', weight: 5, opacity: 0.9, dashArray: '6 8' }).addTo(map);
       points.push(agent, customer);
     }
     if (points.length) {
@@ -116,16 +119,16 @@ function NativeAgentMap({
       showsMyLocationButton={false}
     >
       {customerLocation ? (
-        <Marker coordinate={customerLocation} title="Customer" description="Pickup location" pinColor={BRAND_ORANGE} />
+        <Marker coordinate={customerLocation} title="Customer" description="Pickup location" pinColor="#2563eb" />
       ) : null}
       {agentLocation ? (
-        <Marker coordinate={agentLocation} title="You" description="Your location" pinColor="#1D4ED8" />
+        <Marker coordinate={agentLocation} title="You" description="Your location" pinColor="#2563eb" />
       ) : null}
       {routeCoordinates?.length >= 2 ? (
         <Polyline
           coordinates={routeCoordinates}
           strokeWidth={5}
-          strokeColor={BRAND_ORANGE}
+          strokeColor="#2563eb"
           lineJoin="round"
           lineCap="round"
         />
@@ -146,7 +149,7 @@ export default function AgentMapView({
   const [nativeFailed, setNativeFailed] = useState(false);
   const webRef = useRef(null);
 
-  const useWebMap = Platform.OS === 'web' || isExpoGo || nativeFailed;
+  const useWebMap = true;
 
   const html = useMemo(
     () =>
@@ -177,6 +180,10 @@ export default function AgentMapView({
           domStorageEnabled
           scrollEnabled={false}
         />
+        <View style={styles.floatingPill} pointerEvents="none">
+          <Ionicons name="git-compare-outline" size={16} color="#111827" style={{ marginRight: 6 }} />
+          <Text style={styles.floatingPillText}>Route from source to destination</Text>
+        </View>
         {isExpoGo ? (
           <View style={styles.hint} pointerEvents="none">
             <Text style={styles.hintText}>Map preview (Expo Go). Run: npx expo run:android for native maps.</Text>
@@ -233,4 +240,26 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   hintText: { fontSize: 10, color: '#64748B', textAlign: 'center' },
+  floatingPill: {
+    position: 'absolute',
+    bottom: 24,
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 30,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  floatingPillText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#111827',
+  },
 });

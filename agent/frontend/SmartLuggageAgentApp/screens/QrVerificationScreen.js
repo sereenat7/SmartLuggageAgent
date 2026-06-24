@@ -80,20 +80,35 @@ export default function QrVerificationScreen() {
         const verifiedByName = result.booking?.pickupVerifiedByAgentName || result.booking?.verifiedByAgentName || agentName;
         const verifiedById = result.booking?.pickupVerifiedByAgentId || result.booking?.verifiedByAgentId || agentId;
 
-        navigation.navigate('TaskDetails', {
-          bookingId,
-          pickupVerified: true,
-          pickupVerificationDetails: {
-            verifiedByName,
-            verifiedById,
-            verifiedAt,
-          },
-          task: {
-            ...route.params?.task,
-            ...result.booking,
-            status: result.booking?.status || 'picked_up',
-          },
-        });
+        if (qrType === 'pickup') {
+          navigation.replace('AgentAirportMap', {
+            bookingId,
+            agentId,
+            agentName,
+            request: {
+              ...route.params?.task,
+              ...result.booking,
+              status: result.booking?.status || 'picked_up',
+              assignment_status: result.booking?.assignment_status || 'picked_up',
+            },
+          });
+        } else {
+          navigation.navigate('TaskDetails', {
+            bookingId,
+            pickupVerified: true,
+            pickupVerificationDetails: {
+              verifiedByName,
+              verifiedById,
+              verifiedAt,
+            },
+            task: {
+              ...route.params?.task,
+              ...result.booking,
+              status: result.booking?.status || 'delivered',
+              assignment_status: result.booking?.assignment_status || 'delivered',
+            },
+          });
+        }
       } else {
         Alert.alert('Error', result.message || 'Verification failed');
       }

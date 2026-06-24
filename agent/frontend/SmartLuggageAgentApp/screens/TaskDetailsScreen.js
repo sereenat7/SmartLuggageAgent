@@ -14,6 +14,8 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  FlatList,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +32,14 @@ export default function TaskDetailsScreen({ navigation, route }) {
   console.log('[TaskDetails] Received booking:', booking);
 
   // Local state for actions
+  const [taskDetails, setTaskDetails] = useState(booking);
+  const [messageText, setMessageText] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [messageSuccess, setMessageSuccess] = useState('');
+  const [timeLeft, setTimeLeft] = useState(300); // 5 minutes (300 seconds)
+  const [isChatVisible, setIsChatVisible] = useState(false);
+  const [chatMessages, setChatMessages] = useState([]);
+
   const [luggagePhotos, setLuggagePhotos] = useState([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [isPreviewVisible, setIsPreviewVisible] = useState(false);
@@ -54,15 +64,15 @@ export default function TaskDetailsScreen({ navigation, route }) {
   const otpInputRefs = useRef([]);
 
   // Safe getters for booking fields
-  const customerName = booking?.customerName || booking?.username || booking?.name || booking?.userName || 'Customer';
-  const customerPhone = booking?.phone || booking?.phoneNumber || booking?.customerPhone || booking?.userPhone || '';
-  const pickupLocation = booking?.pickup_address || booking?.pickupLocation || booking?.pickupAddress || 'Pickup location pending';
-  const dropLocation = booking?.drop_address || booking?.dropLocation || booking?.dropAddress || 'Drop location pending';
-  const pickupTime = booking?.pickup_time || booking?.pickupTime || booking?.timeSlot || 'Time slot pending';
-  const luggageCount = Number(booking?.bag_count || booking?.luggage || booking?.bagCount || 1);
-  const bookingId = booking?.bookingId || booking?.booking_id || (String(booking?.id).includes('session') || String(booking?.id).includes('request') ? null : booking?.id);
+  const customerName = taskDetails?.customerName || taskDetails?.username || taskDetails?.name || taskDetails?.userName || 'Customer';
+  const customerPhone = taskDetails?.phone || taskDetails?.phoneNumber || taskDetails?.customerPhone || taskDetails?.userPhone || '';
+  const pickupLocation = taskDetails?.pickup_address || taskDetails?.pickupLocation || taskDetails?.pickupAddress || 'Pickup location pending';
+  const dropLocation = taskDetails?.drop_address || taskDetails?.dropLocation || taskDetails?.dropAddress || 'Drop location pending';
+  const pickupTime = taskDetails?.pickup_time || taskDetails?.pickupTime || taskDetails?.timeSlot || 'Time slot pending';
+  const luggageCount = Number(taskDetails?.bag_count || taskDetails?.luggage || taskDetails?.bagCount || 1);
+  const bookingId = taskDetails?.bookingId || taskDetails?.booking_id || (String(taskDetails?.id).includes('session') || String(taskDetails?.id).includes('request') ? null : taskDetails?.id);
   const referenceImageUri = (() => {
-    let candidate = booking?.referenceImage || booking?.reference_image || booking?.photos || booking?.photo || booking?.image || null;
+    let candidate = taskDetails?.referenceImage || taskDetails?.reference_image || taskDetails?.photos || taskDetails?.photo || taskDetails?.image || null;
     if (!candidate) return null;
     if (typeof candidate === 'string') {
       if (candidate.startsWith('[') && candidate.endsWith(']')) {
@@ -106,28 +116,221 @@ export default function TaskDetailsScreen({ navigation, route }) {
     }
   };
 
+  // Poll booking details from backend to keep UI fully in sync (wait timers, no-show status, etc.)
+  useEffect(() => {
+    if (!bookingId) return;
+
+    let isMounted = true;
+    const fetchBookingDetails = async () => {
+      try {
+        const resp = await fetch(`${USER_API_URL}/api/bookings/agent-details/${bookingId}`);
+        const data = await resp.json().catch(() => ({}));
+        if (isMounted && resp.ok && data?.customer) {
+          setTaskDetails(prev => ({
+            ...prev,
+            ...data.customer,
+            bookingId: bookingId,
+            booking_id: bookingId,
+          }));
+        }
+      } catch (err) {
+        console.warn('Failed to fetch booking details:', err);
+      }
+    };
+
+    fetchBookingDetails();
+    const interval = setInterval(fetchBookingDetails, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [bookingId]);
+
+  // Sync currentStatus when taskDetails updates
+  useEffect(() => {
+    if (taskDetails?.status || taskDetails?.assignmentStatus) {
+      setCurrentStatus(String(taskDetails.status || taskDetails.assignmentStatus || 'pending').toLowerCase());
+    }
+  }, [taskDetails?.status, taskDetails?.assignmentStatus]);
+
+  // Poll chat messages from backend when chat is visible
+  useEffect(() => {
+    if (!isChatVisible || !bookingId) return;
+
+    let isMounted = true;
+    const fetchChatMessages = async () => {
+      try {
+        const resp = await fetch(`${USER_API_URL}/api/agents/messages/${bookingId}`);
+        const data = await resp.json().catch(() => ({}));
+        if (isMounted && resp.ok && data?.messages) {
+          setChatMessages(data.messages);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch chat messages:', err);
+      }
+    };
+
+    fetchChatMessages();
+    const interval = setInterval(fetchChatMessages, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [isChatVisible, bookingId]);
+
+  // Countdown timer for arrival wait
+  const arrivedAtStr = taskDetails?.arrivedAt || taskDetails?.arrived_at || null;
+  const isAtPickup = String(taskDetails?.assignmentStatus || taskDetails?.assignment_status || '').toLowerCase() === 'at_pickup';
+
+  useEffect(() => {
+    if (!arrivedAtStr || !isAtPickup) return;
+
+    const updateTimer = () => {
+      const arrivedTime = new Date(arrivedAtStr).getTime();
+      const elapsed = (Date.now() - arrivedTime) / 1000;
+      const remaining = Math.max(0, 300 - Math.floor(elapsed));
+      setTimeLeft(remaining);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [arrivedAtStr, isAtPickup]);
+
+  const formatTimeLeft = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  // In-app messaging for due diligence
+  const handleSendMessage = async () => {
+    if (!messageText.trim()) return;
+    try {
+      setIsSendingMessage(true);
+      const resp = await fetch(`${USER_API_URL}/api/agents/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bookingId: bookingId,
+          sender: 'agent',
+          message: messageText.trim()
+        })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data.success) {
+        throw new Error(data.message || 'Failed to send message');
+      }
+      setMessageText('');
+      setMessageSuccess('Message sent to customer!');
+      setTimeout(() => setMessageSuccess(''), 3000);
+      
+      // Instantly refresh message count
+      const detailsResp = await fetch(`${USER_API_URL}/api/bookings/agent-details/${bookingId}`);
+      const detailsData = await detailsResp.json().catch(() => ({}));
+      if (detailsResp.ok && detailsData?.customer) {
+        setTaskDetails(prev => ({
+          ...prev,
+          ...detailsData.customer,
+          bookingId: bookingId,
+          booking_id: bookingId,
+        }));
+      }
+    } catch (err) {
+      Alert.alert('Message Error', err.message || 'Failed to send message.');
+    } finally {
+      setIsSendingMessage(false);
+    }
+  };
+
+  // Trigger distance-based cancellation on customer no-show
+  const handleNoShowCancel = async () => {
+    Alert.alert(
+      'Confirm No-Show Cancellation',
+      'Are you sure the customer is a no-show? This will charge the customer a distance-based cancellation fee and cancel this booking.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Cancel Booking',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+               setIsProcessing(true);
+               const resp = await fetch(`${USER_API_URL}/api/agents/no-show`, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({
+                   bookingId: bookingId,
+                   agentId: taskDetails?.agentId || taskDetails?.agent_id || booking?.agentId || 1
+                 })
+               });
+               const data = await resp.json().catch(() => ({}));
+               if (!resp.ok || !data.success) {
+                 throw new Error(data.message || 'No-show cancellation failed');
+               }
+               
+               Alert.alert(
+                 'Booking Cancelled',
+                 `Booking has been cancelled as customer no-show. A fee of ${data.cancellationFee} Rs has been charged to their profile.`,
+                 [
+                   {
+                     text: 'OK',
+                     onPress: () => {
+                       navigation.navigate('Dashboard', { activeTab: 'In Progress', refreshInbox: true });
+                     }
+                   }
+                 ]
+               );
+            } catch (err) {
+              Alert.alert('Cancellation Error', err.message || 'Failed to cancel booking.');
+            } finally {
+              setIsProcessing(false);
+            }
+          }
+        }
+      ]
+    );
+  };
+
   useEffect(() => {
     const verifiedFromRoute = Boolean(route?.params?.pickupVerified || route?.params?.pickupVerificationDetails);
     const verifiedFromBooking = Boolean(
-      booking?.pickupVerified || 
-      booking?.pickup_verified || 
-      booking?.pickupVerifiedAt || 
-      booking?.pickup_verified_at
+      taskDetails?.pickupVerified || 
+      taskDetails?.pickup_verified || 
+      taskDetails?.pickupVerifiedAt || 
+      taskDetails?.pickup_verified_at
     );
     
-    if (verifiedFromRoute || verifiedFromBooking) {
+    const statusLower = normalizeStatus(taskDetails?.status);
+    const assignmentLower = normalizeStatus(taskDetails?.assignmentStatus || taskDetails?.assignment_status);
+
+    if (
+      verifiedFromRoute || 
+      verifiedFromBooking || 
+      statusLower === 'picked_up' || 
+      statusLower === 'on-the-way' || 
+      statusLower === 'on_the_way' || 
+      assignmentLower === 'picked_up' || 
+      assignmentLower === 'at_airport' || 
+      assignmentLower === 'delivered'
+    ) {
       setPickupConfirmed(true);
       if (verifiedFromRoute && route?.params?.pickupVerificationDetails) {
         setPickupVerificationDetails(route.params.pickupVerificationDetails);
       }
-      setCurrentStatus('picked_up');
       return;
+    } else {
+      setPickupConfirmed(false);
     }
-
-    if (normalizeStatus(booking?.status) === 'on-the-way' || normalizeStatus(booking?.status) === 'on_the_way' || normalizeStatus(booking?.status) === 'picked_up') {
-      setPickupConfirmed(true);
-    }
-  }, [booking?.status, booking?.pickupVerified, booking?.pickup_verified, route?.params?.pickupVerified, route?.params?.pickupVerificationDetails]);
+  }, [
+    taskDetails?.status, 
+    taskDetails?.assignmentStatus, 
+    taskDetails?.assignment_status, 
+    taskDetails?.pickupVerified, 
+    taskDetails?.pickup_verified, 
+    route?.params?.pickupVerified, 
+    route?.params?.pickupVerificationDetails
+  ]);
 
   // Resend OTP timer
   useEffect(() => {
@@ -144,6 +347,21 @@ export default function TaskDetailsScreen({ navigation, route }) {
       return;
     }
     Alert.alert('Call Customer', `Calling ${customerName} at ${customerPhone}`);
+  };
+
+  const handleMessageCustomer = () => {
+    if (!customerPhone) {
+      Alert.alert('Error', 'No phone number available');
+      return;
+    }
+    let cleanPhone = customerPhone.replace(/[^0-9]/g, '');
+    if (cleanPhone.length === 10) {
+      cleanPhone = '91' + cleanPhone;
+    }
+    const whatsappUrl = `https://wa.me/${cleanPhone}`;
+    Linking.openURL(whatsappUrl).catch(() => {
+      Alert.alert('Error', 'WhatsApp is not installed on this device');
+    });
   };
 
   const handleTakePhoto = async () => {
@@ -385,6 +603,11 @@ export default function TaskDetailsScreen({ navigation, route }) {
     }
   };
 
+  const statusLowerHelper = normalizeStatus(taskDetails?.status || currentStatus);
+  const assignmentLowerHelper = normalizeStatus(taskDetails?.assignmentStatus || taskDetails?.assignment_status);
+  const isAtAirport = assignmentLowerHelper === 'at_airport';
+  const isDelivered = assignmentLowerHelper === 'delivered' || statusLowerHelper === 'delivered';
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={styles.container}>
@@ -429,14 +652,24 @@ export default function TaskDetailsScreen({ navigation, route }) {
                 </View>
               </View>
 
-              <TouchableOpacity
-                style={[styles.callButton, !customerPhone && styles.callButtonDisabled]}
-                onPress={handleCallCustomer}
-                disabled={!customerPhone}
-              >
-                <Ionicons name="call" size={18} color="#fff" />
-                <Text style={styles.callButtonText}>Call Customer</Text>
-              </TouchableOpacity>
+              <View style={styles.contactRow}>
+                <TouchableOpacity
+                  style={[styles.callButtonCall, !customerPhone && styles.callButtonDisabled]}
+                  onPress={handleCallCustomer}
+                  disabled={!customerPhone}
+                >
+                  <Ionicons name="call" size={18} color="#fff" />
+                  <Text style={styles.callButtonText}>Call Customer</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.callButtonMsg, !customerPhone && styles.callButtonDisabled]}
+                  onPress={handleMessageCustomer}
+                  disabled={!customerPhone}
+                >
+                  <Ionicons name="chatbubbles-outline" size={20} color="#fff" />
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Booking Details */}
@@ -561,9 +794,40 @@ export default function TaskDetailsScreen({ navigation, route }) {
               )}
             </View>
 
+            {/* Pickup Wait & Due Diligence Card */}
+            {isAtPickup && !pickupConfirmed && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Wait Time</Text>
+                
+                {/* No Show Cancellation Button */}
+                <TouchableOpacity
+                  style={[
+                    styles.noShowBtn, 
+                    (timeLeft > 0 || isProcessing) && styles.noShowBtnDisabled
+                  ]}
+                  onPress={handleNoShowCancel}
+                  disabled={timeLeft > 0 || isProcessing}
+                >
+                  {isProcessing ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="close-circle-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+                      <Text style={styles.noShowBtnText}>
+                        {timeLeft > 0 
+                          ? `Wait ${formatTimeLeft(timeLeft)}` 
+                          : 'Mark Customer No Show'
+                        }
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Action Buttons */}
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Actions</Text>
+              <Text style={styles.cardTitle}>Pickup QR</Text>
 
               {!pickupConfirmed ? (
                 <TouchableOpacity
@@ -592,6 +856,41 @@ export default function TaskDetailsScreen({ navigation, route }) {
                 </View>
               )}
             </View>
+
+            {/* Delivery QR - only show if pickup confirmed and assignment status is at_airport or delivered */}
+            {pickupConfirmed && (isAtAirport || isDelivered) && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>Delivery QR</Text>
+
+                {!isDelivered ? (
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.pickupButton]}
+                    onPress={handleCompleteDelivery}
+                    disabled={isProcessing}
+                  >
+                    <>
+                      <Ionicons name="qr-code-outline" size={18} color="#fff" />
+                      <Text style={styles.actionButtonText}>Scan Destination QR</Text>
+                    </>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.verificationSuccessContainer}>
+                    <View style={styles.verificationSuccessRow}>
+                      <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
+                      <Text style={styles.verificationSuccessTitle}>Delivery successfully verified</Text>
+                    </View>
+                    <Text style={styles.verificationSuccessText}>
+                      Verified at: {formatVerifiedAt(
+                        taskDetails?.deliveryVerifiedAt || 
+                        taskDetails?.delivered_at ||
+                        booking?.deliveryVerifiedAt || 
+                        booking?.delivered_at
+                      )}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
 
             {/* OTP Verification - Only show when picked up */}
             {currentStatus === 'picked_up' && false && (
@@ -660,6 +959,88 @@ export default function TaskDetailsScreen({ navigation, route }) {
             )}
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* Chat Modal */}
+        <Modal
+          visible={isChatVisible}
+          animationType="slide"
+          onRequestClose={() => setIsChatVisible(false)}
+        >
+          <SafeAreaView style={styles.chatSafeArea}>
+            {/* Header */}
+            <View style={styles.chatHeader}>
+              <TouchableOpacity onPress={() => setIsChatVisible(false)} style={styles.chatCloseBtn}>
+                <Ionicons name="arrow-back" size={24} color="#1A1C1E" />
+              </TouchableOpacity>
+              <Text style={styles.chatHeaderTitle}>{customerName}</Text>
+              <View style={{ width: 40 }} />
+            </View>
+
+            {/* Message List */}
+            <FlatList
+              data={chatMessages}
+              keyExtractor={(item) => String(item.id || item.created_at || Math.random())}
+              contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+              renderItem={({ item }) => {
+                const isAgent = item.sender === 'agent';
+                return (
+                  <View style={[
+                    styles.msgBubbleContainer,
+                    isAgent ? styles.msgBubbleAgentContainer : styles.msgBubbleUserContainer
+                  ]}>
+                    <View style={[
+                      styles.msgBubble,
+                      isAgent ? styles.msgBubbleAgent : styles.msgBubbleUser
+                    ]}>
+                      <Text style={[
+                        styles.msgText,
+                        isAgent ? styles.msgTextAgent : styles.msgTextUser
+                      ]}>
+                        {item.message}
+                      </Text>
+                      {item.created_at && (
+                        <Text style={[
+                          styles.msgTime,
+                          isAgent ? styles.msgTimeAgent : styles.msgTimeUser
+                        ]}>
+                          {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                );
+              }}
+            />
+
+            {/* Input Footer */}
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            >
+              <View style={styles.chatFooter}>
+                <TextInput
+                  style={styles.chatModalInput}
+                  placeholder="Type a message..."
+                  placeholderTextColor="#94A3B8"
+                  value={messageText}
+                  onChangeText={setMessageText}
+                  multiline
+                />
+                <TouchableOpacity
+                  style={[styles.chatModalSendBtn, (!messageText.trim() || isSendingMessage) && styles.chatModalSendBtnDisabled]}
+                  onPress={handleSendMessage}
+                  disabled={!messageText.trim() || isSendingMessage}
+                >
+                  {isSendingMessage ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="send" size={18} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </KeyboardAvoidingView>
+          </SafeAreaView>
+        </Modal>
 
         {/* Image Preview Modal */}
         <Modal
@@ -944,4 +1325,231 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   previewImage: { width: '90%', height: '80%' },
+  timerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    gap: 12,
+  },
+  timerTextContainer: {
+    flex: 1,
+  },
+  timerLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  timerValue: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  timerActive: {
+    color: '#ff6600',
+  },
+  timerCompleted: {
+    color: '#22c55e',
+  },
+  diligenceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  diligenceText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  chatInputContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  chatInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: '#1A1C1E',
+    backgroundColor: '#F8FAFC',
+  },
+  sendBtn: {
+    backgroundColor: '#ff6600',
+    borderRadius: 10,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendBtnDisabled: {
+    backgroundColor: '#CBD5E1',
+  },
+  successText: {
+    color: '#22c55e',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  noShowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    marginTop: 8,
+  },
+  noShowBtnDisabled: {
+    backgroundColor: '#CBD5E1',
+    opacity: 0.7,
+  },
+  noShowBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  contactRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  callButtonCall: {
+    flex: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#10B981',
+    borderRadius: 10,
+  },
+  callButtonMsg: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    backgroundColor: '#3B82F6',
+    borderRadius: 10,
+  },
+  chatSafeArea: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  chatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  chatCloseBtn: {
+    padding: 8,
+  },
+  chatHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1A1C1E',
+  },
+  msgBubbleContainer: {
+    flexDirection: 'row',
+    marginVertical: 4,
+    width: '100%',
+  },
+  msgBubbleAgentContainer: {
+    justifyContent: 'flex-end',
+  },
+  msgBubbleUserContainer: {
+    justifyContent: 'flex-start',
+  },
+  msgBubble: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    maxWidth: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 1.5,
+    elevation: 1,
+  },
+  msgBubbleAgent: {
+    backgroundColor: '#ff6600',
+    borderTopRightRadius: 2,
+  },
+  msgBubbleUser: {
+    backgroundColor: '#F1F5F9',
+    borderTopLeftRadius: 2,
+  },
+  msgText: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  msgTextAgent: {
+    color: '#FFFFFF',
+  },
+  msgTextUser: {
+    color: '#1A1C1E',
+  },
+  msgTime: {
+    fontSize: 9,
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  msgTimeAgent: {
+    color: 'rgba(255,255,255,0.7)',
+  },
+  msgTimeUser: {
+    color: '#64748B',
+  },
+  chatFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    gap: 10,
+  },
+  chatModalInput: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    maxHeight: 100,
+    fontSize: 14,
+    color: '#1A1C1E',
+  },
+  chatModalSendBtn: {
+    backgroundColor: '#ff6600',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chatModalSendBtnDisabled: {
+    backgroundColor: '#CBD5E1',
+  },
 });

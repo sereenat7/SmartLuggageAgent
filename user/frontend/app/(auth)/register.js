@@ -21,7 +21,7 @@ export default function RegisterScreen() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [confirm, setConfirm] = useState("");
-    const BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/auth`;
+    const BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://172.16.111.44:5000'}/api/auth`;
 
     const [errors, setErrors] = useState({});
     const [focus, setFocus] = useState("");
@@ -250,3 +250,4 @@ const styles = StyleSheet.create({
     btnText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
     bottomText: { textAlign: "center", marginTop: 15, color: "gray" }
 });
+

@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-const IP_ADDRESS = process.env.EXPO_PUBLIC_API_HOST || "10.110.169.52";
+const IP_ADDRESS = process.env.EXPO_PUBLIC_API_HOST || "172.16.111.44";
 const API_URL = `http://${IP_ADDRESS}:5000/api/auth`;
 
 export default function EditProfile() {
@@ -254,3 +254,4 @@ const styles = StyleSheet.create({
   saveButton: { flex: 0.46, height: 58, backgroundColor: '#FF4B2B', justifyContent: 'center', alignItems: 'center', borderRadius: 18 },
   saveText: { fontWeight: '700', color: '#FFF' },
 });
+

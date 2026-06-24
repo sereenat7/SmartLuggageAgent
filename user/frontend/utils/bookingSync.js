@@ -160,10 +160,12 @@ export const getBookingStage = (booking) => {
     status === 'on_the_way' ||
     status === 'on-the-way' ||
     status === 'picked_up' ||
+    status === 'picked' ||
     status === 'pickup_completed' ||
     assignmentStatus === 'on_the_way' ||
     assignmentStatus === 'on-the-way' ||
     assignmentStatus === 'picked_up' ||
+    assignmentStatus === 'picked' ||
     assignmentStatus === 'en_route' ||
     assignmentStatus === 'pickup_completed'
   ) {

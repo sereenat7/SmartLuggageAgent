@@ -149,6 +149,34 @@ const initializeDatabase = (callback) => {
     // Add missing columns to support_agents
     `ALTER TABLE support_agents ADD last_assigned_at TIMESTAMP NULL`,
     
+    // Edge Cases 4 & 5 columns
+    `ALTER TABLE bookings ADD arrived_at TIMESTAMP NULL`,
+    `ALTER TABLE bookings ADD user_notified_2m TINYINT DEFAULT 0`,
+    `ALTER TABLE bookings ADD user_warned_4m TINYINT DEFAULT 0`,
+    `ALTER TABLE bookings ADD no_show_unlocked TINYINT DEFAULT 0`,
+    `ALTER TABLE bookings ADD cancellation_reason VARCHAR(100) NULL`,
+    `ALTER TABLE bookings ADD agent_start_lat FLOAT NULL`,
+    `ALTER TABLE bookings ADD agent_start_lng FLOAT NULL`,
+    `ALTER TABLE bookings ADD surge_bonus DECIMAL(10, 2) DEFAULT 0.00`,
+    `ALTER TABLE bookings ADD cancellation_fee DECIMAL(10, 2) DEFAULT 0.00`,
+    `ALTER TABLE bookings ADD refund_amount DECIMAL(10, 2) DEFAULT 0.00`,
+    `ALTER TABLE bookings ADD rating INT NULL`,
+    `ALTER TABLE bookings ADD rating_comment TEXT NULL`,
+    `ALTER TABLE users ADD pending_cancellation_fee DECIMAL(10, 2) DEFAULT 0.00`,
+    `ALTER TABLE support_agents ADD consecutive_ignored_count INT DEFAULT 0`,
+    `ALTER TABLE support_agents ADD cooldown_until TIMESTAMP NULL`,
+    `ALTER TABLE support_agents ADD last_heartbeat_at TIMESTAMP NULL`,
+    `ALTER TABLE support_agents ADD availability_check_sent_at TIMESTAMP NULL`,
+    `ALTER TABLE support_agents MODIFY COLUMN status VARCHAR(50) DEFAULT 'available'`,
+    `ALTER TABLE agent_queue ADD broadcasted_agent_ids VARCHAR(255) NULL`,
+    `CREATE TABLE IF NOT EXISTS booking_messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      booking_id INT NOT NULL,
+      sender VARCHAR(20) NOT NULL,
+      message TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    
     // 8. Fix existing pending bookings - only set assignment_due_at for FUTURE bookings
     // Build datetime from departure_date and pickup_time, compare with NOW()
     // Assign 5 minutes BEFORE pickup time

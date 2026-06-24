@@ -239,67 +239,66 @@ export default function AgentTrackingScreen({ navigation, route }) {
         </View>
 
         <View style={styles.bottomSheet}>
-          <LinearGradient colors={BrandGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.sheetHeader}>
-            <Text style={styles.sheetHeaderText}>{statusLabel.toUpperCase()}</Text>
-          </LinearGradient>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Customer Details</Text>
+            <View style={styles.statusBadge}>
+              <Text style={styles.statusBadgeText}>{statusLabel}</Text>
+            </View>
+          </View>
 
-          <View style={styles.sheetBody}>
-            <Text style={styles.bookingTitle}>Booking #{bookingId || '--'}</Text>
-            <View style={styles.infoRow}>
-              <Ionicons name="person-outline" size={18} color="#94A3B8" />
-              <Text style={styles.infoText}>{customerName}</Text>
+          <View style={styles.customerProfileRow}>
+            <View style={styles.avatarCircle}>
+              <Ionicons name="person" size={24} color="#FFFFFF" />
             </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="call-outline" size={18} color="#94A3B8" />
-              <Text style={styles.infoText}>{customerPhone || 'Not available'}</Text>
+            <View style={styles.customerInfo}>
+              <Text style={styles.customerNameText}>{customerName}</Text>
+              <Text style={styles.customerMetaText}>{booking?.bag_count || booking?.bagCount || 1} bags</Text>
             </View>
-            <View style={styles.infoRow}>
-              <Ionicons name="location-outline" size={18} color="#94A3B8" />
-              <Text style={styles.infoText} numberOfLines={2}>
-                {isDeliveryLeg ? dropLabel : pickupLabel}
-              </Text>
-            </View>
-
-            <View style={styles.actionRow}>
-              <TouchableOpacity style={styles.actionTouch} onPress={handleCall} activeOpacity={0.88}>
-                <LinearGradient colors={BrandGradient} style={styles.actionBtn}>
-                  <Ionicons name="call" size={18} color="#FFFFFF" />
-                  <Text style={styles.actionBtnText}>CALL</Text>
-                </LinearGradient>
+            <View style={styles.actionButtonsGroup}>
+              <TouchableOpacity style={styles.phoneCallBtn} onPress={handleCall} activeOpacity={0.8}>
+                <Ionicons name="call" size={20} color="#1E293B" />
               </TouchableOpacity>
-
-              <TouchableOpacity style={styles.actionTouch} onPress={handleMessage} activeOpacity={0.88}>
-                <LinearGradient colors={BrandGradient} style={styles.actionBtn}>
-                  <Ionicons name="chatbubble-outline" size={18} color="#FFFFFF" />
-                  <Text style={styles.actionBtnText}>MESSAGE</Text>
-                </LinearGradient>
+              <TouchableOpacity style={styles.phoneCallBtn} onPress={handleMessage} activeOpacity={0.8}>
+                <Ionicons name="chatbubbles-outline" size={20} color="#1E293B" />
               </TouchableOpacity>
             </View>
+          </View>
 
+          <View style={styles.statsRow}>
+            <View style={styles.statCol}>
+              <Text style={styles.statColLabel}>ETA</Text>
+              <Text style={styles.statColValue}>{loadingLocation || loadingRoute ? '...' : etaLabel}</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statCol}>
+              <Text style={styles.statColLabel}>DISTANCE</Text>
+              <Text style={styles.statColValue}>{loadingLocation || loadingRoute ? '...' : distanceLabel}</Text>
+            </View>
+          </View>
+
+          {routeError ? <Text style={styles.routeWarn}>{routeError}</Text> : null}
+
+          {actionConfig.action !== 'done' && (
             <TouchableOpacity
               style={[
-                styles.bigActionButton,
-                actionConfig.action === 'done' && styles.bigActionButtonDisabled,
+                styles.primaryActionBtn,
+                actionConfig.action === 'done' && styles.primaryActionBtnDisabled,
               ]}
               onPress={handleBigAction}
               disabled={actionConfig.action === 'done' || actionLoading}
               activeOpacity={0.9}
             >
               {actionLoading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
+                <View style={[styles.primaryActionGradient, { backgroundColor: BRAND_ORANGE }]}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                </View>
               ) : (
-                <Text style={styles.bigActionButtonText}>{actionConfig.label}</Text>
+                <LinearGradient colors={BrandGradient} style={styles.primaryActionGradient}>
+                  <Text style={styles.primaryActionText}>{actionConfig.label}</Text>
+                </LinearGradient>
               )}
             </TouchableOpacity>
-
-            {routeError ? <Text style={styles.routeWarn}>{routeError}</Text> : null}
-            {loadingLocation || loadingRoute ? (
-              <View style={styles.loadingRow}>
-                <ActivityIndicator size="small" color={BRAND_ORANGE} />
-                <Text style={styles.loadingText}>Updating live route...</Text>
-              </View>
-            ) : null}
-          </View>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -331,7 +330,7 @@ const styles = StyleSheet.create({
   recenterBtn: {
     position: 'absolute',
     right: 16,
-    bottom: SCREEN_WIDTH < 380 ? 290 : 315,
+    bottom: 300,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -345,104 +344,140 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  etaBadge: {
-    position: 'absolute',
-    top: 14,
-    right: 68,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    zIndex: 30,
-  },
-  etaBadgeLabel: { fontSize: 10, color: '#64748B', fontWeight: '700' },
-  etaBadgeValue: { fontSize: 15, color: '#111827', fontWeight: '800', marginTop: 2 },
-  distanceBadge: {
-    position: 'absolute',
-    top: 14,
-    left: 68,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    zIndex: 30,
-  },
-  distanceBadgeLabel: { fontSize: 10, color: '#64748B', fontWeight: '700' },
-  distanceBadgeValue: { fontSize: 15, color: '#111827', fontWeight: '800', marginTop: 2 },
-  routeStatusPill: {
-    position: 'absolute',
-    bottom: SCREEN_WIDTH < 380 ? 300 : 325,
-    alignSelf: 'center',
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    zIndex: 30,
-  },
-  routeStatusPillText: { fontSize: 12, color: '#111827', fontWeight: '800' },
   bottomSheet: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    left: 16,
+    right: 16,
+    bottom: 16,
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 12,
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 40,
   },
-  sheetHeader: {
-    paddingVertical: 13,
-    paddingHorizontal: 16,
+  cardHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#1F2937',
+  },
+  statusBadge: {
+    backgroundColor: '#E8FFF2',
+    borderColor: '#D1FAE5',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  statusBadgeText: {
+    color: '#10B981',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  customerProfileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  actionButtonsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  avatarCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FF6600',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  customerInfo: {
+    flex: 1,
+  },
+  customerNameText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1F2937',
+  },
+  customerMetaText: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  phoneCallBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#F3F4F6',
+    paddingVertical: 14,
+    marginBottom: 16,
+  },
+  statCol: {
+    flex: 1,
     alignItems: 'center',
   },
-  sheetHeaderText: {
+  statColLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  statColValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#111827',
+    marginTop: 4,
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#E5E7EB',
+  },
+  primaryActionBtn: {
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  primaryActionBtnDisabled: {
+    backgroundColor: '#94A3B8',
+  },
+  primaryActionGradient: {
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  primaryActionText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
   },
-  sheetBody: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 18,
+  routeWarn: {
+    fontSize: 12,
+    color: '#B45309',
+    marginTop: 4,
+    marginBottom: 8,
   },
-  bookingTitle: { fontSize: 16, fontWeight: '800', color: '#111827', marginBottom: 12 },
-  infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 9, gap: 8 },
-  infoText: { flex: 1, fontSize: 14, color: '#334155', fontWeight: '500' },
-  actionRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  actionTouch: { flex: 1 },
-  actionBtn: {
-    minHeight: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
-  bigActionButton: {
-    marginTop: 14,
-    backgroundColor: BRAND_ORANGE,
-    borderRadius: 16,
-    minHeight: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  bigActionButtonDisabled: { backgroundColor: '#94A3B8' },
-  bigActionButtonText: { color: '#FFFFFF', fontWeight: '900', fontSize: 14, letterSpacing: 0.4 },
-  routeWarn: { fontSize: 12, color: '#B45309', marginTop: 8 },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8 },
-  loadingText: { fontSize: 12, color: '#64748B', fontWeight: '600' },
 });

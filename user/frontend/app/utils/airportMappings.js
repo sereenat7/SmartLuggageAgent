@@ -27,7 +27,7 @@ export const normalizeAirportName = (airportName) => {
 const fetchCoordinatesFromGeoapify = async (address) => {
   try {
     const response = await fetch(
-      `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/geocode`,
+      `${process.env.EXPO_PUBLIC_API_URL || 'http://172.16.111.44:5000'}/api/geocode`,
       {
         method: 'POST',
         headers: {
@@ -85,3 +85,4 @@ export const createDropLocation = async (depAirport, terminal) => {
     terminal: terminal || 'N/A'
   };
 };
+

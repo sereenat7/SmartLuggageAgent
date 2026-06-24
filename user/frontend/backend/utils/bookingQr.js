@@ -60,7 +60,7 @@ const parseManifest = (value) => {
 const isDestinationUnlocked = (bookingRow) => {
   const status = String(bookingRow?.status || '').toLowerCase().trim();
   const assignmentStatus = String(bookingRow?.assignment_status || '').toLowerCase().trim();
-  return status === 'in-progress' || status === 'picked_up' || status === 'delivered' || assignmentStatus === 'at_pickup' || assignmentStatus === 'picked_up' || assignmentStatus === 'delivered';
+  return status === 'delivered' || status === 'completed' || assignmentStatus === 'at_airport' || assignmentStatus === 'delivered';
 };
 
 const verifyQrPayload = ({ bookingId, qrType, qrValue, manifest, bookingRow }) => {

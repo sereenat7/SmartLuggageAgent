@@ -1,8 +1,17 @@
 const express = require("express");
 const router = express.Router();
+const db = require("../db");
+
+const runQuery = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.query(sql, params, (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    });
+  });
+
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
-const db = require("../db");
 const { queueBookingForAgentDashboard } = require("./bookings");
 const { createBookingQrManifest } = require("../utils/bookingQr");
 const fs = require("fs");
@@ -150,8 +159,24 @@ router.post("/create-order", verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid amount" });
     }
 
+    // Retrieve user's pending cancellation fee if any
+    let pendingFee = 0;
+    const userPhoneClean = req.phone;
+    const userPhoneAlt = req.phone?.startsWith("+91") ? req.phone.slice(3) : `+91${req.phone}`;
+    
+    const userRows = await runQuery(
+      "SELECT pending_cancellation_fee FROM users WHERE phone = ? OR phone = ? LIMIT 1",
+      [userPhoneClean, userPhoneAlt]
+    );
+    if (userRows.length && Number(userRows[0].pending_cancellation_fee) > 0) {
+      pendingFee = Number(userRows[0].pending_cancellation_fee);
+      console.log(`[FEE] User phone ${req.phone} has a pending cancellation fee of ${pendingFee} Rs. Adding to payment order.`);
+    }
+
+    const finalAmount = amount + pendingFee;
+
     // Amount should be in paise (multiply by 100)
-    const amountInPaise = Math.round(amount * 100);
+    const amountInPaise = Math.round(finalAmount * 100);
 
     const options = {
       amount: amountInPaise,
@@ -160,7 +185,8 @@ router.post("/create-order", verifyToken, async (req, res) => {
       notes: {
         phone: req.phone,
         bookingDetails: JSON.stringify(bookingDetails),
-        appName: "SmartLuggageAgent"
+        appName: "SmartLuggageAgent",
+        pendingCancellationFee: String(pendingFee)
       }
     };
 
@@ -175,7 +201,8 @@ router.post("/create-order", verifyToken, async (req, res) => {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      key: process.env.Live_API_Key
+      key: process.env.Live_API_Key,
+      pendingCancellationFee: pendingFee
     });
   } catch (error) {
     console.error("Error creating Razorpay order:", error);
@@ -342,6 +369,19 @@ router.post("/verify-payment", verifyToken, async (req, res) => {
         const bookingId = result.insertId;
         paymentLog('✅ Booking created successfully - ID: ' + bookingId);
         console.log('Booking created successfully - ID:', bookingId);
+
+        // Clear user's pending cancellation fee since it's paid now
+        try {
+          const userPhoneClean = req.phone;
+          const userPhoneAlt = req.phone?.startsWith("+91") ? req.phone.slice(3) : `+91${req.phone}`;
+          await runQuery(
+            "UPDATE users SET pending_cancellation_fee = 0 WHERE phone = ? OR phone = ?",
+            [userPhoneClean, userPhoneAlt]
+          );
+          console.log(`[PAYMENT] Cleared pending cancellation fee for user phone: ${req.phone}`);
+        } catch (feeErr) {
+          console.error("Failed to clear user pending fee:", feeErr);
+        }
 
         const qrManifest = createBookingQrManifest(bookingId);
         db.query(

@@ -653,6 +653,8 @@ router.get("/agent-details/:bookingId", (req, res) => {
     SELECT b.id, b.username, b.phone, b.pickup_address, b.pickup_latitude, b.pickup_longitude,
            b.drop_address, b.drop_latitude, b.drop_longitude, b.pickup_time, b.departure_date,
            b.bag_count, b.bag_weight, b.airline_name, b.flight_number, b.photos,
+           b.arrived_at, b.assignment_status, b.status, b.no_show_unlocked,
+           (SELECT COUNT(*) FROM booking_messages WHERE booking_id = b.id AND sender = 'agent') AS agent_message_count,
            u.name AS user_name, u.phone AS user_phone
     FROM bookings b
     LEFT JOIN users u ON u.id = (
@@ -685,6 +687,7 @@ router.get("/agent-details/:bookingId", (req, res) => {
     res.json({
       success: true,
       customer: {
+        bookingId: row.id,
         name: row.user_name || row.username || "Customer",
         phone: row.user_phone || row.phone || "",
         pickupAddress: row.pickup_address || "",
@@ -700,6 +703,11 @@ router.get("/agent-details/:bookingId", (req, res) => {
         airlineName: row.airline_name,
         flightNumber: row.flight_number,
         photos: photosArray,
+        arrivedAt: row.arrived_at,
+        assignmentStatus: row.assignment_status,
+        status: row.status,
+        noShowUnlocked: row.no_show_unlocked,
+        agentMessageCount: row.agent_message_count || 0,
       },
     });
   });
@@ -1092,6 +1100,149 @@ router.post("/confirm-qr-verification/:bookingId", async (req, res) => {
       message: 'Failed to confirm verification',
       error: error.message,
     });
+  }
+});
+
+// Cancel booking with custom fee and refund calculations
+router.post("/cancel/:bookingId", verifyToken, async (req, res) => {
+  const { bookingId } = req.params;
+  const { reason } = req.body;
+
+  try {
+    // 1. Fetch the booking
+    const bookings = await runQuery("SELECT * FROM bookings WHERE id = ?", [bookingId]);
+    if (!bookings.length) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+    const booking = bookings[0];
+
+    // Check if already completed or cancelled
+    if (booking.status === 'completed' || booking.status === 'delivered') {
+      return res.status(400).json({ success: false, message: "Cannot cancel a completed booking" });
+    }
+    if (booking.status === 'cancelled') {
+      return res.json({ 
+        success: true, 
+        message: "Booking is already cancelled", 
+        cancellationFee: Number(booking.cancellation_fee || 0),
+        refundAmount: Number(booking.refund_amount || 0) 
+      });
+    }
+
+    let cancellationFee = 0;
+    let distanceTraveled = 0;
+
+    // 2. If agent has marked arrival at pickup, charge flat ₹100 penalty
+    if (booking.arrived_at) {
+      cancellationFee = 100;
+      console.log(`[CANCEL] Booking #${bookingId} - Agent has arrived at pickup. Flat ₹100 penalty charged.`);
+    } else if (booking.assigned_agent_id) {
+      const agentId = booking.assigned_agent_id;
+      
+      // Get agent's current location from support_agents
+      const agents = await runQuery("SELECT latitude, longitude FROM support_agents WHERE agent_id = ?", [agentId]);
+      if (agents.length > 0) {
+        const agent = agents[0];
+        const currentLat = toNumberOrNull(agent.latitude);
+        const currentLng = toNumberOrNull(agent.longitude);
+        const startLat = toNumberOrNull(booking.agent_start_lat);
+        const startLng = toNumberOrNull(booking.agent_start_lng);
+
+        console.log(`[CANCEL] Booking #${bookingId} - Agent Start: (${startLat}, ${startLng}), Live: (${currentLat}, ${currentLng})`);
+
+        if (currentLat !== null && currentLng !== null && startLat !== null && startLng !== null) {
+          // Calculate distance in km
+          distanceTraveled = haversineKm(startLat, startLng, currentLat, currentLng);
+          // If agent has moved more than 50 meters, charge ₹10/km, else ₹0
+          if (distanceTraveled > 0.05) {
+            cancellationFee = Number((distanceTraveled * 10).toFixed(2));
+          }
+        }
+      }
+    }
+
+    const amountPaid = Number(booking.amount || 0);
+    const refundAmount = Math.max(0, Number((amountPaid - cancellationFee).toFixed(2)));
+
+    // 3. Update status and save cancellation details in the database
+    await runQuery(
+      `UPDATE bookings SET 
+        status = 'cancelled', 
+        assignment_status = 'cancelled', 
+        cancellation_reason = ?,
+        cancellation_fee = ?,
+        refund_amount = ?
+       WHERE id = ?`,
+      [reason || 'User Cancelled', cancellationFee, refundAmount, bookingId]
+    );
+
+    // 4. Cancel the queue status for this booking
+    await runQuery("UPDATE agent_queue SET status = 'cancelled' WHERE booking_id = ?", [bookingId]);
+
+    // 5. If agent was assigned, free them up and terminate active session
+    if (booking.assigned_agent_id) {
+      const agentId = booking.assigned_agent_id;
+      // Terminate active agent sessions
+      await runQuery(
+        "UPDATE agent_sessions SET status = 'completed', end_time = CURRENT_TIMESTAMP WHERE booking_id = ? AND status = 'active'",
+        [bookingId]
+      );
+      // Free the agent
+      await runQuery(
+        "UPDATE support_agents SET status = 'available', current_user_id = NULL WHERE agent_id = ?",
+        [agentId]
+      );
+    }
+
+    console.log(`[CANCEL] Booking #${bookingId} Cancelled. Paid: ₹${amountPaid}, Fee: ₹${cancellationFee}, Refund: ₹${refundAmount}`);
+
+    return res.json({
+      success: true,
+      message: "Booking cancelled successfully",
+      cancellationFee,
+      refundAmount,
+      amountPaid,
+      distanceTraveled: Number(distanceTraveled.toFixed(2))
+    });
+
+  } catch (error) {
+    console.error("Cancel booking error:", error);
+    return res.status(500).json({ success: false, message: "Failed to cancel booking", error: error.message });
+  }
+});
+
+// Submit rating and comment for completed booking
+router.post("/rating/:bookingId", verifyToken, async (req, res) => {
+  const { bookingId } = req.params;
+  const { rating, comment } = req.body;
+
+  if (rating === undefined || rating < 1 || rating > 5) {
+    return res.status(400).json({ success: false, message: "Rating must be between 1 and 5" });
+  }
+
+  try {
+    // Check if booking exists
+    const bookings = await runQuery("SELECT * FROM bookings WHERE id = ?", [bookingId]);
+    if (!bookings.length) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+    
+    // Verify booking status is delivered or completed
+    const booking = bookings[0];
+    const status = String(booking.status || '').toLowerCase().trim();
+    if (status !== 'delivered' && status !== 'completed') {
+      return res.status(400).json({ success: false, message: "Can only rate completed bookings" });
+    }
+
+    await runQuery(
+      "UPDATE bookings SET rating = ?, rating_comment = ? WHERE id = ?",
+      [rating, comment || null, bookingId]
+    );
+
+    return res.json({ success: true, message: "Rating submitted successfully" });
+  } catch (error) {
+    console.error("Submit rating error:", error);
+    return res.status(500).json({ success: false, message: "Failed to submit rating", error: error.message });
   }
 });
 

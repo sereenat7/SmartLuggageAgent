@@ -279,7 +279,7 @@ export default function BookingSummary() {
 
       // Verify payment with backend
       const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/payment/verify-payment`,
+        `${process.env.EXPO_PUBLIC_API_URL || 'http://172.16.111.44:5000'}/api/payment/verify-payment`,
         {
           method: 'POST',
           headers: {
@@ -682,3 +682,4 @@ const styles = StyleSheet.create({
   modifyBtn: { alignSelf: 'center', marginTop: 15 },
   modifyText: { color: '#C7C7CC', fontWeight: '700', fontSize: 14 },
 });
+

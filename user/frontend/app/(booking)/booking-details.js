@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, StatusBar, ActivityIndicator, Alert, Platform, Image
+  SafeAreaView, StatusBar, ActivityIndicator, Alert, Platform, Image, TextInput
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { buildTimeline } from '../../utils/bookingSync';
 
 export default function BookingDetailsScreen() {
   const router = useRouter();
@@ -14,7 +15,70 @@ export default function BookingDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(null);
 
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/bookings`;
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
+
+  const handleSubmitRating = async () => {
+    if (rating === 0) {
+      Alert.alert("Rating Required", "Please select a star rating between 1 and 5.");
+      return;
+    }
+
+    try {
+      setSubmittingRating(true);
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        Alert.alert("Error", "Not authenticated");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/rating/${bookingId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ rating, comment })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        Alert.alert("Thank You", "Your feedback has been submitted successfully!");
+        fetchBookingDetails();
+      } else {
+        Alert.alert("Failed", data.message || "Failed to submit rating");
+      }
+    } catch (error) {
+      console.error("❌ Error submitting rating:", error);
+      Alert.alert("Error", "Failed to submit rating");
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
+
+  const renderStars = (count, interactive = false) => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      stars.push(
+        <TouchableOpacity
+          key={i}
+          disabled={!interactive}
+          onPress={() => setRating(i)}
+          style={{ marginRight: 6 }}
+        >
+          <MaterialCommunityIcons
+            name={i <= count ? "star" : "star-outline"}
+            size={32}
+            color={i <= count ? "#FF6600" : "#cbd5e1"}
+          />
+        </TouchableOpacity>
+      );
+    }
+    return <View style={{ flexDirection: 'row', marginVertical: 10 }}>{stars}</View>;
+  };
+
+  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://172.16.111.44:5000'}/api/bookings`;
 
   useEffect(() => {
     fetchBookingDetails();
@@ -52,6 +116,55 @@ export default function BookingDetailsScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCancelBooking = async () => {
+    Alert.alert(
+      "Cancel Booking",
+      "Are you sure you want to cancel this booking?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoading(true);
+              const token = await AsyncStorage.getItem('authToken');
+              if (!token) {
+                Alert.alert("Error", "Not authenticated");
+                return;
+              }
+
+              const response = await fetch(`${API_URL}/cancel/${bookingId}`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ reason: "User Cancelled" })
+              });
+
+              const data = await response.json();
+              if (data.success) {
+                Alert.alert(
+                  "Booking Cancelled",
+                  `Booking cancelled successfully.\n\nCancellation Charge: ₹${data.cancellationFee}\nRefund Amount: ₹${data.refundAmount}`,
+                  [{ text: "OK", onPress: () => fetchBookingDetails() }]
+                );
+              } else {
+                Alert.alert("Cancellation Failed", data.message || "Failed to cancel booking");
+              }
+            } catch (error) {
+              console.error("❌ Error cancelling booking:", error);
+              Alert.alert("Error", "Failed to cancel booking");
+            } finally {
+              setLoading(false);
+            }
+          }
+        }
+      ]
+    );
   };
 
   if (loading) {
@@ -219,38 +332,26 @@ export default function BookingDetailsScreen() {
         {renderSection(
           'Tracking Timeline',
           'timeline',
-          <View style={styles.timeline}>
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: '#4CAF50' }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineStatus}>Assigned</Text>
-                <Text style={styles.timelineTime}>{booking.assigned_time || 'In progress'}</Text>
-              </View>
-            </View>
-            <View style={styles.timelineLine} />
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: booking.booking_status === 'delivered' || booking.booking_status === 'picked' ? '#4CAF50' : '#DDD' }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineStatus}>Picked Up</Text>
-                <Text style={styles.timelineTime}>{booking.pickup_time || 'Pending'}</Text>
-              </View>
-            </View>
-            <View style={styles.timelineLine} />
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: booking.booking_status === 'in transit' || booking.booking_status === 'delivered' ? '#2196F3' : '#DDD' }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineStatus}>In Transit</Text>
-                <Text style={styles.timelineTime}>{booking.in_transit_time || 'Pending'}</Text>
-              </View>
-            </View>
-            <View style={styles.timelineLine} />
-            <View style={styles.timelineItem}>
-              <View style={[styles.timelineDot, { backgroundColor: booking.booking_status === 'delivered' ? '#4CAF50' : '#DDD' }]} />
-              <View style={styles.timelineContent}>
-                <Text style={styles.timelineStatus}>Delivered</Text>
-                <Text style={styles.timelineTime}>{booking.delivered_time || 'Pending'}</Text>
-              </View>
-            </View>
+          <View style={styles.timelineContainer}>
+            {buildTimeline(booking).map((node, index, arr) => {
+              const isLast = index === arr.length - 1;
+              const isActive = node.active;
+              return (
+                <View key={node.title} style={styles.timelineNodeBlockRow}>
+                  <View style={styles.timelineLeftTrackIndicatorCol}>
+                    <View style={[
+                      styles.timelineNodeCircle, 
+                      { backgroundColor: isActive ? '#ff6600' : '#cbd5e1' }
+                    ]} />
+                    {!isLast && <View style={styles.timelineVerticalLine} />}
+                  </View>
+                  <View style={styles.timelineContentDataBlock}>
+                    <Text style={[styles.timelineNodeTitleText, !isActive && styles.dimmedTimelineText]}>{node.title}</Text>
+                    <Text style={[styles.timelineNodeTimestampText, !isActive && styles.dimmedTimelineText]}>{node.timestamp}</Text>
+                  </View>
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -312,18 +413,69 @@ export default function BookingDetailsScreen() {
                 </View>
               )}
             </View>
-            <View style={[styles.qrCard, styles.qrCardLocked]}>
-              <View style={styles.lockedQrHeader}>
-                <MaterialCommunityIcons name="lock" size={24} color="#F59E0B" />
-                <Text style={styles.qrTitle}>Delivery QR Locked</Text>
+            {booking.destination_qr_image ? (
+              <View style={styles.qrCard}>
+                <Text style={styles.qrTitle}>Delivery QR</Text>
+                <Image source={{ uri: booking.destination_qr_image }} style={styles.qrImage} />
               </View>
-              <Text style={styles.lockedQrText}>
-                This QR code will become available after the assigned agent reaches the destination/airport.
-              </Text>
-              <Text style={styles.lockedQrTextSecondary}>
-                Please wait for the delivery process to progress.
-              </Text>
-            </View>
+            ) : (
+              <View style={[styles.qrCard, styles.qrCardLocked]}>
+                <View style={styles.lockedQrHeader}>
+                  <MaterialCommunityIcons name="lock" size={24} color="#F59E0B" />
+                  <Text style={styles.qrTitle}>Delivery QR Locked</Text>
+                </View>
+                <Text style={styles.lockedQrText}>
+                  This QR code will become available after the assigned agent reaches the destination/airport.
+                </Text>
+                <Text style={styles.lockedQrTextSecondary}>
+                  Please wait for the delivery process to progress.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Agent Feedback / Rating Section */}
+        {(statusValue === 'delivered' || statusValue === 'completed') && renderSection(
+          'Agent Feedback',
+          'star-circle',
+          <View style={styles.feedbackContainer}>
+            {booking.rating !== null && booking.rating !== undefined ? (
+              <View style={styles.submittedFeedback}>
+                <Text style={styles.feedbackLabel}>Your Rating</Text>
+                {renderStars(booking.rating, false)}
+                {booking.rating_comment ? (
+                  <View style={styles.commentBox}>
+                    <Text style={styles.commentText}>"{booking.rating_comment}"</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.ratingForm}>
+                <Text style={styles.feedbackText}>How was your experience with our agent?</Text>
+                {renderStars(rating, true)}
+                <TextInput
+                  style={styles.feedbackInput}
+                  placeholder="Leave a comment (optional)..."
+                  placeholderTextColor="#94a3b8"
+                  value={comment}
+                  onChangeText={setComment}
+                  multiline
+                  numberOfLines={3}
+                />
+                <TouchableOpacity
+                  style={[styles.submitFeedbackBtn, submittingRating && styles.submitFeedbackBtnDisabled]}
+                  onPress={handleSubmitRating}
+                  disabled={submittingRating}
+                >
+                  {submittingRating ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.submitFeedbackBtnText}>Submit Feedback</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -340,10 +492,36 @@ export default function BookingDetailsScreen() {
 
       {/* FIXED BOTTOM ACTION BAR */}
       <View style={styles.bottomButtonContainer}>
-        <TouchableOpacity style={styles.actionButton} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="phone" size={20} color="white" />
-          <Text style={styles.actionButtonText}>Contact Support</Text>
-        </TouchableOpacity>
+        {booking.status !== 'cancelled' && booking.status !== 'completed' && booking.status !== 'delivered' ? (
+          <View style={styles.bottomButtonsRow}>
+            <TouchableOpacity
+              style={styles.trackButton}
+              activeOpacity={0.8}
+              onPress={() => router.push({ pathname: '/(tabs)/track', params: { bookingId: booking.id } })}
+            >
+              <MaterialCommunityIcons name="routes" size={20} color="white" />
+              <Text style={styles.buttonText}>Track</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.cancelButton, isPickupVerified && styles.disabledCancelButton]}
+              activeOpacity={isPickupVerified ? 1 : 0.8}
+              onPress={isPickupVerified ? null : handleCancelBooking}
+              disabled={isPickupVerified}
+            >
+              <MaterialCommunityIcons name="close-circle-outline" size={20} color="white" />
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity 
+            style={styles.actionButton} 
+            activeOpacity={0.8} 
+            onPress={() => Alert.alert("Contact Support", "Please call our helpline for support.")}
+          >
+            <MaterialCommunityIcons name="phone" size={20} color="white" />
+            <Text style={styles.actionButtonText}>Contact Support</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -571,5 +749,156 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4
   },
-  actionButtonText: { color: 'white', fontSize: 16, fontWeight: '700', marginLeft: 10 }
+  actionButtonText: { color: 'white', fontSize: 16, fontWeight: '700', marginLeft: 10 },
+  bottomButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  trackButton: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ff6600',
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginRight: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  cancelButton: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    paddingVertical: 14,
+    marginLeft: 8,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  disabledCancelButton: {
+    backgroundColor: '#cbd5e1',
+    opacity: 0.7,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 10,
+  },
+  timelineContainer: {
+    paddingVertical: 4,
+  },
+  timelineNodeBlockRow: {
+    flexDirection: 'row',
+  },
+  timelineLeftTrackIndicatorCol: {
+    alignItems: 'center',
+    width: 24,
+    marginRight: 14,
+    position: 'relative',
+  },
+  timelineNodeCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    zIndex: 2,
+  },
+  timelineVerticalLine: {
+    width: 2,
+    backgroundColor: '#cbd5e1',
+    position: 'absolute',
+    top: 14,
+    bottom: -22,
+    left: 11,
+    zIndex: 1,
+  },
+  timelineContentDataBlock: {
+    flex: 1,
+    paddingBottom: 22,
+  },
+  timelineNodeTitleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  timelineNodeTimestampText: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 3,
+    fontWeight: '500',
+  },
+  dimmedTimelineText: {
+    color: '#94a3b8',
+  },
+  feedbackContainer: {
+    paddingVertical: 4,
+  },
+  feedbackText: {
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  feedbackLabel: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  submittedFeedback: {
+    alignItems: 'flex-start',
+  },
+  commentBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 6,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  commentText: {
+    fontSize: 13,
+    color: '#334155',
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  ratingForm: {
+    width: '100%',
+  },
+  feedbackInput: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    color: '#1e293b',
+    backgroundColor: '#f8fafc',
+    textAlignVertical: 'top',
+    minHeight: 60,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  submitFeedbackBtn: {
+    backgroundColor: '#FF6600',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitFeedbackBtnDisabled: {
+    backgroundColor: '#cbd5e1',
+  },
+  submitFeedbackBtnText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });
+

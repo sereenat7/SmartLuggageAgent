@@ -11,8 +11,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // 1. Double check your IPv4 address using 'ipconfig'
 // 2. Ensure port is 5000 (from your server.js)
-const IP_ADDRESS = process.env.EXPO_PUBLIC_API_HOST || "10.110.169.52";
-const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/auth/user-profile`;
+const IP_ADDRESS = process.env.EXPO_PUBLIC_API_HOST || "172.16.111.44";
+const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://172.16.111.44:5000'}/api/auth/user-profile`;
 
 const ProfileOption = ({ icon, title, color, onPress }) => (
   <TouchableOpacity style={styles.optionRow} onPress={onPress}>
@@ -185,3 +185,4 @@ const styles = StyleSheet.create({
   logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF', paddingVertical: 18, borderRadius: 22, borderWidth: 1, borderColor: '#FEE2E2', marginTop: 10, elevation: 2 },
   logoutLabel: { fontSize: 17, fontWeight: '700', color: '#ff6600', marginLeft: 12 },
 });
+

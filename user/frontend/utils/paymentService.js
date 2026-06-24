@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend API URL from .env file - change EXPO_PUBLIC_API_URL in .env to update
-const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/payment`;
+const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://172.16.111.44:5000'}/api/payment`;
 
 /**
  * Create a Razorpay order
@@ -196,3 +196,4 @@ export const calculateBookingPrice = (bagCount, weight, distance) => {
   // Apply discount for fragile items if needed
   return totalPrice;
 };
+

@@ -40,8 +40,8 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
   return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
-const buildInitialRegion = (agentLocation, customerLocation) => {
-  const points = [agentLocation, customerLocation].filter(Boolean);
+const buildInitialRegion = (agentLocation, airportLocation) => {
+  const points = [agentLocation, airportLocation].filter(Boolean);
   if (!points.length) {
     return { latitude: 28.6139, longitude: 77.2090, latitudeDelta: 0.08, longitudeDelta: 0.08 };
   }
@@ -68,26 +68,29 @@ const buildInitialRegion = (agentLocation, customerLocation) => {
 };
 
 const buildTaskFromRequest = (request) => ({
-  id: request?.sessionId ? `session-${request.sessionId}` : `request-${request?.queueId || Date.now()}`,
+  ...request,
+  id: request?.sessionId ? `session-${request.sessionId}` : (request?.id || `request-${request?.queueId || Date.now()}`),
   sessionId: request?.sessionId || null,
   bookingId: request?.bookingId || request?.booking_id || null,
   agentName: request?.agentName || 'Agent',
   agentId: request?.agentId || null,
   type: 'Pickup',
-  pickupLocation: request?.pickupAddress || 'Pickup location pending',
-  dropLocation: request?.dropAddress || 'Drop location pending',
+  pickupLocation: request?.pickupAddress || request?.pickupLocation || 'Pickup location pending',
+  dropLocation: request?.dropAddress || request?.dropLocation || 'Drop location pending',
   timeSlot: request?.pickupTime || 'Time slot pending',
-  luggage: Number(request?.bagCount || 1),
-  status: 'in-progress',
+  luggage: Number(request?.bagCount || request?.luggage || 1),
+  status: request?.status || 'in-progress',
+  assignment_status: request?.assignment_status || request?.assignmentStatus || null,
+  assignmentStatus: request?.assignment_status || request?.assignmentStatus || null,
   phoneNumber: request?.phone || '',
-  customerName: request?.name || 'Customer',
-  customerPhone: request?.phone || '',
+  customerName: request?.name || request?.customerName || 'Customer',
+  customerPhone: request?.phone || request?.customerPhone || '',
   pickupLatitude: request?.pickupLatitude || null,
   pickupLongitude: request?.pickupLongitude || null,
   photos: request?.photos || null,
 });
 
-export default function AgentRouteMapScreen({ navigation, route }) {
+export default function AgentAirportMapScreen({ navigation, route }) {
   const request = route?.params?.request || {};
   
   // Extract a strictly numeric booking ID
@@ -127,7 +130,7 @@ export default function AgentRouteMapScreen({ navigation, route }) {
           setCustomerFromServer(data.customer);
         }
       } catch (_e) {
-        // fallback to navigation params
+        // fallback
       } finally {
         if (!cancelled) setLoadingCustomer(false);
       }
@@ -149,21 +152,53 @@ export default function AgentRouteMapScreen({ navigation, route }) {
     request?.userPhone ||
     '';
 
-  const customerLocation = useMemo(() => {
+  const airportLocation = useMemo(() => {
     const rawLat =
-      customerFromServer?.pickupLatitude ??
-      request?.pickupLatitude;
+      customerFromServer?.dropLatitude ??
+      request?.dropLatitude ??
+      customerFromServer?.drop_latitude ??
+      request?.drop_latitude;
     const rawLng =
-      customerFromServer?.pickupLongitude ??
-      request?.pickupLongitude;
-    const normalized = normalizeLatLng(rawLat, rawLng);
-    if (!Number.isFinite(normalized.latitude)) return null;
-    return normalized;
+      customerFromServer?.dropLongitude ??
+      request?.dropLongitude ??
+      customerFromServer?.drop_longitude ??
+      request?.drop_longitude;
+    
+    let lat = toNumberOrNull(rawLat);
+    let lng = toNumberOrNull(rawLng);
+
+    const text = String(
+      customerFromServer?.dropAddress ||
+      customerFromServer?.drop_address ||
+      request?.dropAddress ||
+      request?.drop_address ||
+      ''
+    ).toLowerCase();
+
+    if (!lat || !lng || (Math.abs(lat) < 0.01 && Math.abs(lng) < 0.01)) {
+      if (text.includes('del') || text.includes('indira gandhi') || text.includes('delhi')) {
+        lat = 28.5562;
+        lng = 77.1000;
+      } else {
+        lat = 19.0896;
+        lng = 72.8656;
+      }
+    }
+    
+    return { latitude: lat, longitude: lng };
   }, [
-    customerFromServer?.pickupLatitude,
-    customerFromServer?.pickupLongitude,
-    request?.pickupLatitude,
-    request?.pickupLongitude,
+    customerFromServer?.dropLatitude,
+    customerFromServer?.dropLongitude,
+    customerFromServer?.dropAddress,
+    customerFromServer?.drop_address,
+    request?.dropLatitude,
+    request?.dropLongitude,
+    request?.dropAddress,
+    request?.drop_address,
+    customerFromServer?.drop_latitude,
+    customerFromServer?.drop_longitude,
+    request?.drop_latitude,
+    request?.drop_longitude,
   ]);
 
   const [agentLocation, setAgentLocation] = useState(null);
@@ -205,7 +240,7 @@ export default function AgentRouteMapScreen({ navigation, route }) {
     let cancelled = false;
 
     const loadShortestRoute = async () => {
-      if (!agentLocation || !customerLocation) return;
+      if (!agentLocation || !airportLocation) return;
 
       setLoadingRoute(true);
       setRouteError('');
@@ -214,7 +249,7 @@ export default function AgentRouteMapScreen({ navigation, route }) {
         const routeUrl =
           `https://router.project-osrm.org/route/v1/driving/` +
           `${agentLocation.longitude},${agentLocation.latitude};` +
-          `${customerLocation.longitude},${customerLocation.latitude}` +
+          `${airportLocation.longitude},${airportLocation.latitude}` +
           `?overview=full&geometries=geojson`;
 
         const response = await fetch(routeUrl);
@@ -238,11 +273,11 @@ export default function AgentRouteMapScreen({ navigation, route }) {
         const straightDistance = haversineKm(
           agentLocation.latitude,
           agentLocation.longitude,
-          customerLocation.latitude,
-          customerLocation.longitude,
+          airportLocation.latitude,
+          airportLocation.longitude,
         );
         if (!cancelled) {
-          setRouteCoordinates([agentLocation, customerLocation]);
+          setRouteCoordinates([agentLocation, airportLocation]);
           setDistanceKm(Number(straightDistance.toFixed(1)));
           setEtaMinutes(Math.max(1, Math.ceil((straightDistance / DEFAULT_CITY_SPEED_KMPH) * 60)));
           setRouteError('Live route unavailable. Showing direct path.');
@@ -254,26 +289,17 @@ export default function AgentRouteMapScreen({ navigation, route }) {
 
     loadShortestRoute();
     return () => { cancelled = true; };
-  }, [agentLocation, customerLocation]);
+  }, [agentLocation, airportLocation]);
 
   const initialRegion = useMemo(
-    () => buildInitialRegion(agentLocation, customerLocation),
-    [agentLocation, customerLocation],
+    () => buildInitialRegion(agentLocation, airportLocation),
+    [agentLocation, airportLocation],
   );
 
-  const etaRangeText = useMemo(() => {
-    if (!Number.isFinite(etaMinutes)) return '--';
-    const low = Math.max(1, etaMinutes - 1);
-    const high = etaMinutes + 1;
-    return `${low}-${high} min`;
-  }, [etaMinutes]);
-
-  const mapEtaLabel = Number.isFinite(etaMinutes) ? `ETA ${etaMinutes} MIN` : 'ETA --';
-
   const fitMapToRoute = () => {
-    if (!mapRef.current?.fitToCoordinates || !agentLocation || !customerLocation) return;
+    if (!mapRef.current?.fitToCoordinates || !agentLocation || !airportLocation) return;
     mapRef.current.fitToCoordinates(
-      routeCoordinates.length >= 2 ? routeCoordinates : [agentLocation, customerLocation],
+      routeCoordinates.length >= 2 ? routeCoordinates : [agentLocation, airportLocation],
       {
         edgePadding: { top: 80, right: 48, bottom: 280, left: 48 },
         animated: true,
@@ -312,20 +338,18 @@ export default function AgentRouteMapScreen({ navigation, route }) {
     });
   };
 
-  const handleArrived = async () => {
+  const handleArrivedAirport = async () => {
     try {
-      const resp = await fetch(`${USER_API_URL}/api/agents/arrived`, {
+      const resp = await fetch(`${USER_API_URL}/api/agents/arrived-airport`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          sessionId: request?.sessionId || null,
           bookingId: bookingIdFromParams,
-          agentId: request?.agentId || null,
         }),
       });
       if (!resp.ok) {
         const data = await resp.json().catch(() => ({}));
-        throw new Error(data.message || `Update failed (${resp.status})`);
+        throw new Error(data.message || `Airport arrival update failed (${resp.status})`);
       }
       navigation.reset({
         index: 0,
@@ -337,16 +361,25 @@ export default function AgentRouteMapScreen({ navigation, route }) {
               ...customerFromServer,
               bookingId: bookingIdFromParams,
               sessionId: request?.sessionId,
+              status: 'in-progress',
+              assignment_status: 'at_airport',
             }),
           },
         }],
       });
     } catch (e) {
-      Alert.alert('Arrived', e?.message || 'Failed to mark arrival.');
+      Alert.alert('Arrival Error', e?.message || 'Failed to mark airport arrival.');
     }
   };
 
-  const hasValidDestination = Boolean(customerLocation);
+  const mapEtaLabel = etaMinutes ? `ETA ${etaMinutes} MIN` : 'ETA --';
+  const etaRangeText = useMemo(() => {
+    if (!Number.isFinite(etaMinutes)) return '--';
+    const low = Math.max(1, etaMinutes - 1);
+    const high = etaMinutes + 1;
+    return `${low}-${high} min`;
+  }, [etaMinutes]);
+  const hasValidDestination = Boolean(airportLocation);
   const isBusy = loadingLocation || loadingRoute || loadingCustomer;
 
   return (
@@ -354,8 +387,8 @@ export default function AgentRouteMapScreen({ navigation, route }) {
       <View style={styles.container}>
         {!hasValidDestination ? (
           <View style={styles.centerState}>
-            <Text style={styles.centerStateTitle}>Pickup location missing</Text>
-            <Text style={styles.centerStateText}>This booking has no customer coordinates yet.</Text>
+            <Text style={styles.centerStateTitle}>Airport location missing</Text>
+            <Text style={styles.centerStateText}>This booking has no airport coordinates yet.</Text>
           </View>
         ) : (
           <AgentMapView
@@ -363,7 +396,7 @@ export default function AgentRouteMapScreen({ navigation, route }) {
             style={styles.map}
             initialRegion={initialRegion}
             agentLocation={agentLocation}
-            customerLocation={customerLocation}
+            customerLocation={airportLocation}
             routeCoordinates={routeCoordinates}
             etaMinutes={etaMinutes}
           />
@@ -391,7 +424,7 @@ export default function AgentRouteMapScreen({ navigation, route }) {
             </View>
             <View style={styles.customerInfo}>
               <Text style={styles.customerNameText}>{customerName}</Text>
-              <Text style={styles.customerMetaText}>{request?.bagCount || customerFromServer?.bag_count || 1} bags</Text>
+              <Text style={styles.customerMetaText}>{request?.bagCount || request?.luggage || customerFromServer?.bag_count || 1} bags</Text>
             </View>
             <View style={styles.actionButtonsGroup}>
               <TouchableOpacity style={styles.phoneCallBtn} onPress={handleCall} activeOpacity={0.8}>
@@ -417,10 +450,10 @@ export default function AgentRouteMapScreen({ navigation, route }) {
 
           {routeError ? <Text style={styles.routeWarn}>{routeError}</Text> : null}
 
-          <TouchableOpacity style={styles.primaryActionBtn} onPress={handleArrived} activeOpacity={0.9}>
+          <TouchableOpacity style={styles.primaryActionBtn} onPress={handleArrivedAirport} activeOpacity={0.9}>
             <LinearGradient colors={BrandGradient} style={styles.primaryActionGradient}>
               <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-              <Text style={styles.primaryActionText}>ARRIVED / START TASK</Text>
+              <Text style={styles.primaryActionText}>ARRIVED / END TASK</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>

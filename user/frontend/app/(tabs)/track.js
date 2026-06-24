@@ -11,6 +11,8 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  Alert,
+  TextInput,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -63,6 +65,7 @@ const GEOAPIFY_TILE_STYLE = 'osm-liberty';
 
 const toFiniteNumber = (value) => {
   const parsed = Number(value);
+  if (!parsed || parsed === 0) return null;
   return Number.isFinite(parsed) ? parsed : null;
 };
 
@@ -325,6 +328,69 @@ export default function TrackLuggage() {
   const router = useRouter();
   const [bookingId, setBookingId] = useState(params.bookingId ? String(params.bookingId) : '');
   const [booking, setBooking] = useState(null);
+
+  const [rating, setRating] = useState(0);
+  const [comment, setComment] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
+
+  const handleSubmitRating = async () => {
+    if (rating === 0) {
+      Alert.alert("Rating Required", "Please select a star rating between 1 and 5.");
+      return;
+    }
+
+    try {
+      setSubmittingRating(true);
+      const token = await AsyncStorage.getItem('authToken');
+      if (!token) {
+        Alert.alert("Error", "Not authenticated");
+        return;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/bookings/rating/${bookingId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ rating, comment })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        Alert.alert("Thank You", "Your feedback has been submitted successfully!");
+        await fetchBookingData(bookingId);
+      } else {
+        Alert.alert("Failed", data.message || "Failed to submit rating");
+      }
+    } catch (error) {
+      console.error("❌ Error submitting rating:", error);
+      Alert.alert("Error", "Failed to submit rating");
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
+
+  const renderStars = (count, interactive = false) => {
+    const stars = [];
+    for (let i = 1; i <= 5; i++) {
+      stars.push(
+        <TouchableOpacity
+          key={i}
+          disabled={!interactive}
+          onPress={() => setRating(i)}
+          style={{ marginRight: 6 }}
+        >
+          <Ionicons
+            name={i <= count ? "star" : "star-outline"}
+            size={32}
+            color={i <= count ? "#FF6600" : "#cbd5e1"}
+          />
+        </TouchableOpacity>
+      );
+    }
+    return <View style={{ flexDirection: 'row', marginVertical: 10 }}>{stars}</View>;
+  };
   const [assignment, setAssignment] = useState(null);
   const [agentProfile, setAgentProfile] = useState(null);
   const [liveAgentLocation, setLiveAgentLocation] = useState(null);
@@ -335,6 +401,31 @@ export default function TrackLuggage() {
   const [mapImageLoading, setMapImageLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
   const isCompleted = useRef(false);
+
+  const [timeLeft, setTimeLeft] = useState(300);
+  const arrivedAtStr = booking?.arrived_at || null;
+  const isAtPickup = String(booking?.assignment_status || '').toLowerCase() === 'at_pickup';
+
+  useEffect(() => {
+    if (!arrivedAtStr || !isAtPickup) return;
+
+    const updateTimer = () => {
+      const arrivedTime = new Date(arrivedAtStr).getTime();
+      const elapsed = (Date.now() - arrivedTime) / 1000;
+      const remaining = Math.max(0, 300 - Math.floor(elapsed));
+      setTimeLeft(remaining);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [arrivedAtStr, isAtPickup]);
+
+  const formatTimeLeft = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
 
   const pollingRef = useRef(null);
   const lastPolledRef = useRef(0);
@@ -507,7 +598,7 @@ export default function TrackLuggage() {
       }
 
       await fetchBookingData(targetBookingId);
-    }, 10000);
+    }, 4000);
 
     setLoading(false);
   }, [fetchBookingData]);
@@ -603,12 +694,25 @@ export default function TrackLuggage() {
   const vehicleNumber = stage >= 2
     ? (assignedAgent?.vehicleNumber || assignedAgent?.vehicleType || trackingBooking?.vehicle_number || trackingBooking?.vehicle_type || 'Vehicle pending')
     : 'Waiting for agent acceptance';
-  const driverStatus = stage >= 5 ? 'Completed' : stage >= 4 ? 'On The Way' : stage >= 3 ? 'In Progress' : stage >= 2 ? 'Agent Assigned' : stage >= 1 ? 'Pending' : 'No booking';
+  const driverStatus = stage >= 5 ? 'Completed' : stage >= 4 ? 'On The Way' : stage >= 3 ? 'In Progress' : stage >= 2 ? 'On The Way' : stage >= 1 ? 'Pending' : 'No booking';
   const etaText = formatEta(liveEtaMinutes || h3Status?.computed?.travelEtaMinutes || trackingBooking?.agent_eta_minutes || trackingBooking?.eta_minutes);
   const pickupLatitude = toFiniteNumber(trackingBooking?.pickup_latitude || trackingBooking?.pickupLatitude);
   const pickupLongitude = toFiniteNumber(trackingBooking?.pickup_longitude || trackingBooking?.pickupLongitude);
-  const dropLatitude = toFiniteNumber(trackingBooking?.drop_latitude || trackingBooking?.dropLatitude);
-  const dropLongitude = toFiniteNumber(trackingBooking?.drop_longitude || trackingBooking?.dropLongitude);
+  
+  const dropAddressText = String(trackingBooking?.drop_address || trackingBooking?.dropAddress || '').toLowerCase();
+  let dropLatitude = toFiniteNumber(trackingBooking?.drop_latitude || trackingBooking?.dropLatitude);
+  let dropLongitude = toFiniteNumber(trackingBooking?.drop_longitude || trackingBooking?.dropLongitude);
+
+  if (!dropLatitude || !dropLongitude || (Math.abs(dropLatitude) < 0.01 && Math.abs(dropLongitude) < 0.01)) {
+    if (dropAddressText.includes('del') || dropAddressText.includes('indira gandhi') || dropAddressText.includes('delhi')) {
+      dropLatitude = 28.5562;
+      dropLongitude = 77.1000;
+    } else {
+      // Default to Mumbai Airport (Chhatrapati Shivaji Intl - Terminal 1) as seen in mockup
+      dropLatitude = 19.0896;
+      dropLongitude = 72.8656;
+    }
+  }
   const hasPickupPoint = pickupLatitude !== null && pickupLongitude !== null;
   const hasDropPoint = dropLatitude !== null && dropLongitude !== null;
   const centerLatitude = hasPickupPoint && hasDropPoint
@@ -923,7 +1027,7 @@ export default function TrackLuggage() {
             {/* Fix 4: Only show call button when driver is assigned */}
             {stage >= 2 && driverPhone ? (
               <TouchableOpacity style={styles.telephonyIconButton} activeOpacity={0.8} onPress={handleCallDriver}>
-                <Ionicons name="call" size={18} color="#16a34a" />
+                <Ionicons name="call" size={18} color="#64748b" />
               </TouchableOpacity>
             ) : (
               <View style={[styles.telephonyIconButton, { opacity: 0.3 }]}>
@@ -956,6 +1060,27 @@ export default function TrackLuggage() {
           ) : null}
         </View>
 
+        {/* Agent Arrived & Waiting Countdown Banner */}
+        {isAtPickup && (
+          <View style={styles.timerCard}>
+            <View style={styles.timerRow}>
+              <View style={styles.timerIconCircle}>
+                <Ionicons name="time" size={24} color="#ffffff" />
+              </View>
+              <View style={styles.timerTextContainer}>
+                <Text style={styles.timerTitle}>
+                  {timeLeft > 0 ? 'Agent Waiting at Pickup' : 'Agent Wait Complete'}
+                </Text>
+                <Text style={styles.timerSubtitle}>
+                  {timeLeft > 0 
+                    ? `Agent has arrived. Countdown active: ${formatTimeLeft(timeLeft)}` 
+                    : 'The agent has waited 5 minutes. Please meet the agent immediately to avoid cancellation.'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* PROGRESS GRAPH TIMELINE NODES */}
         <View style={styles.trackingProgressTimelineCard}>
           <Text style={styles.timelineSectionHeader}>Tracking Progress</Text>
@@ -979,6 +1104,49 @@ export default function TrackLuggage() {
             );
           })}
         </View>
+
+        {/* Agent Rating Section on completion */}
+        {completed && (
+          <View style={styles.ratingCard}>
+            <Text style={styles.ratingCardTitle}>Rate your Agent</Text>
+            {booking?.rating !== null && booking?.rating !== undefined ? (
+              <View style={styles.submittedFeedback}>
+                <Text style={styles.feedbackLabel}>Your Rating</Text>
+                {renderStars(booking.rating, false)}
+                {booking.rating_comment ? (
+                  <View style={styles.commentBox}>
+                    <Text style={styles.commentText}>"{booking.rating_comment}"</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.ratingForm}>
+                <Text style={styles.feedbackText}>How was your experience with our agent?</Text>
+                {renderStars(rating, true)}
+                <TextInput
+                  style={styles.feedbackInput}
+                  placeholder="Leave a comment (optional)..."
+                  placeholderTextColor="#94a3b8"
+                  value={comment}
+                  onChangeText={setComment}
+                  multiline
+                  numberOfLines={3}
+                />
+                <TouchableOpacity
+                  style={[styles.submitFeedbackBtn, submittingRating && styles.submitFeedbackBtnDisabled]}
+                  onPress={handleSubmitRating}
+                  disabled={submittingRating}
+                >
+                  {submittingRating ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.submitFeedbackBtnText}>Submit Feedback</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
 
       </ScrollView>
     </View>
@@ -1250,7 +1418,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0fdf4',
+    backgroundColor: '#f1f5f9',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1434,5 +1602,126 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#16a34a',
     flex: 1,
+  },
+  timerCard: {
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#b45309',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  timerIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#EA580C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerTextContainer: {
+    flex: 1,
+  },
+  timerTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#9A3412',
+    marginBottom: 2,
+  },
+  timerSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#C2410C',
+    lineHeight: 16,
+  },
+  ratingCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 18,
+    marginBottom: 20,
+  },
+  ratingCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 12,
+  },
+  feedbackText: {
+    fontSize: 14,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  feedbackLabel: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '600',
+  },
+  submittedFeedback: {
+    alignItems: 'flex-start',
+  },
+  commentBox: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 6,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  commentText: {
+    fontSize: 13,
+    color: '#334155',
+    fontStyle: 'italic',
+    lineHeight: 18,
+  },
+  ratingForm: {
+    width: '100%',
+  },
+  feedbackInput: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 13,
+    color: '#1e293b',
+    backgroundColor: '#f8fafc',
+    textAlignVertical: 'top',
+    minHeight: 60,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  submitFeedbackBtn: {
+    backgroundColor: '#FF6600',
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitFeedbackBtnDisabled: {
+    backgroundColor: '#cbd5e1',
+  },
+  submitFeedbackBtnText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

@@ -15,7 +15,7 @@ export default function BookingsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/bookings`;
+  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://172.16.111.44:5000'}/api/bookings`;
 
   const fetchBookings = useCallback(async () => {
     setIsLoading(true);
@@ -256,3 +256,4 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1, alignItems: 'center', marginTop: 100 },
   emptyText: { marginTop: 15, color: '#9CA3AF', fontSize: 16, fontWeight: '600' }
 });
+

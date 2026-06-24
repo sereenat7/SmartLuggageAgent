@@ -643,6 +643,8 @@ router.get("/inbox", async (req, res) => {
       );
       if (agentRows.length) {
         currentAgentId = Number(agentRows[0].agent_id) || null;
+      } else {
+        currentAgentId = null;
       }
     }
 
@@ -674,7 +676,7 @@ router.get("/inbox", async (req, res) => {
       }
     }
     const waitingRows = await runQuery(
-      `SELECT q.id, q.user_id, q.booking_id, q.preferred_agent_id, q.declined_agent_ids, q.status, q.requested_at,
+      `SELECT q.id, q.user_id, q.booking_id, q.preferred_agent_id, q.broadcasted_agent_ids, q.declined_agent_ids, q.status, q.requested_at,
               u.name, u.phone,
               b.pickup_time, b.departure_date, b.bag_count, b.bag_weight, b.pickup_address,
               b.pickup_latitude, b.pickup_longitude, b.drop_address, b.airline_name, b.flight_number,
@@ -690,8 +692,17 @@ router.get("/inbox", async (req, res) => {
     const visibleWaiting = [];
     for (const row of waitingRows) {
       const declinedAgentIds = parseDeclinedAgentIds(row.declined_agent_ids);
+      
+      let isBroadcasted = false;
+      if (row.broadcasted_agent_ids) {
+        const broadcastedIds = String(row.broadcasted_agent_ids).split(',').map(id => Number(id.trim())).filter(Boolean);
+        if (currentAgentId && broadcastedIds.includes(currentAgentId) && !declinedAgentIds.includes(currentAgentId)) {
+          isBroadcasted = true;
+        }
+      }
+
       let targetAgentId = Number(row.preferred_agent_id) || null;
-      if (!targetAgentId && row.booking_id) {
+      if (!targetAgentId && !row.broadcasted_agent_ids && row.booking_id) {
         targetAgentId = await getBestAgentIdForBooking(row.booking_id, { excludedAgentIds: declinedAgentIds });
         if (targetAgentId) {
           // ✅ FIXED: was queue_id, correct column is id
@@ -701,7 +712,16 @@ router.get("/inbox", async (req, res) => {
           );
         }
       }
-      if (currentAgentId && targetAgentId && targetAgentId !== currentAgentId) continue;
+      
+      if (currentAgentId) {
+        if (isBroadcasted) {
+          // Allowed by parallel broadcast
+        } else if (targetAgentId && targetAgentId === currentAgentId) {
+          // Allowed by preferred assignment
+        } else {
+          continue;
+        }
+      }
       const pickupLat = toNumberOrNull(row.pickup_latitude);
       const pickupLng = toNumberOrNull(row.pickup_longitude);
       const storedTravelEta = toNumberOrNull(row.agent_eta_minutes);
@@ -768,7 +788,8 @@ router.get("/inbox", async (req, res) => {
               b.drop_address, b.drop_latitude, b.drop_longitude,
               b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
               b.airline_name, b.flight_number, b.assignment_due_at, b.photos,
-              b.status, b.pickup_verified, b.pickup_verified_at, b.pickup_verified_by_agent_name, b.delivery_verified_at
+              b.status, b.pickup_verified, b.pickup_verified_at, b.pickup_verified_by_agent_name, b.delivery_verified_at,
+              b.arrived_at, b.assignment_status, b.no_show_unlocked
           FROM agent_sessions s
           JOIN support_agents a ON a.agent_id = s.agent_id
           JOIN users u ON u.id = s.user_id
@@ -780,13 +801,44 @@ router.get("/inbox", async (req, res) => {
               b.drop_address, b.drop_latitude, b.drop_longitude,
               b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
               b.airline_name, b.flight_number, b.assignment_due_at, b.photos,
-              b.status, b.pickup_verified, b.pickup_verified_at, b.pickup_verified_by_agent_name, b.delivery_verified_at
+              b.status, b.pickup_verified, b.pickup_verified_at, b.pickup_verified_by_agent_name, b.delivery_verified_at,
+              b.arrived_at, b.assignment_status, b.no_show_unlocked
           FROM agent_sessions s
           JOIN support_agents a ON a.agent_id = s.agent_id
           JOIN users u ON u.id = s.user_id
           LEFT JOIN bookings b ON b.id = s.booking_id
           WHERE s.status = 'active' ORDER BY s.start_time DESC`;
     const activeRows = await runQuery(activeSql, currentAgentId ? [currentAgentId] : []);
+
+    const completedSql = currentAgentId
+      ? `SELECT s.session_id, s.user_id, s.agent_id, s.booking_id, s.start_time, a.name AS agent_name, a.phone AS agent_phone,
+              u.name AS user_name, u.phone AS user_phone,
+              b.pickup_address, b.pickup_latitude, b.pickup_longitude,
+              b.drop_address, b.drop_latitude, b.drop_longitude,
+              b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
+              b.airline_name, b.flight_number, b.assignment_due_at, b.photos,
+              b.status, b.pickup_verified, b.pickup_verified_at, b.pickup_verified_by_agent_name, b.delivery_verified_at,
+              b.arrived_at, b.assignment_status, b.no_show_unlocked
+          FROM agent_sessions s
+          JOIN support_agents a ON a.agent_id = s.agent_id
+          JOIN users u ON u.id = s.user_id
+          LEFT JOIN bookings b ON b.id = s.booking_id
+          WHERE s.status = 'completed' AND s.agent_id = ? ORDER BY s.end_time DESC LIMIT 20`
+      : `SELECT s.session_id, s.user_id, s.agent_id, s.booking_id, s.start_time, a.name AS agent_name, a.phone AS agent_phone,
+              u.name AS user_name, u.phone AS user_phone,
+              b.pickup_address, b.pickup_latitude, b.pickup_longitude,
+              b.drop_address, b.drop_latitude, b.drop_longitude,
+              b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
+              b.airline_name, b.flight_number, b.assignment_due_at, b.photos,
+              b.status, b.pickup_verified, b.pickup_verified_at, b.pickup_verified_by_agent_name, b.delivery_verified_at,
+              b.arrived_at, b.assignment_status, b.no_show_unlocked
+          FROM agent_sessions s
+          JOIN support_agents a ON a.agent_id = s.agent_id
+          JOIN users u ON u.id = s.user_id
+          LEFT JOIN bookings b ON b.id = s.booking_id
+          WHERE s.status = 'completed' ORDER BY s.end_time DESC LIMIT 20`;
+    const completedRows = await runQuery(completedSql, currentAgentId ? [currentAgentId] : []);
+
     return res.json({
       success: true,
       waiting: visibleWaiting.map((row) => {
@@ -848,6 +900,41 @@ router.get("/inbox", async (req, res) => {
           pickupVerifiedByAgentName: row.pickup_verified_by_agent_name,
           deliveryVerifiedAt: row.delivery_verified_at,
           photos: photosArray,
+          arrivedAt: row.arrived_at,
+          assignmentStatus: row.assignment_status,
+          noShowUnlocked: row.no_show_unlocked,
+        };
+      }),
+      completedSessions: completedRows.map((row) => {
+        let photosArray = null;
+        if (row.photos) {
+          try {
+            photosArray = JSON.parse(row.photos);
+          } catch (e) {
+            photosArray = row.photos;
+          }
+        }
+        return {
+          sessionId: row.session_id, userId: row.user_id, agentId: row.agent_id,
+          startTime: row.start_time, agentName: row.agent_name, agentPhone: row.agent_phone,
+          userName: row.user_name, userPhone: row.user_phone,
+          bookingId: row.booking_id,
+          pickupAddress: row.pickup_address, pickupLatitude: row.pickup_latitude,
+          pickupLongitude: row.pickup_longitude, dropAddress: row.drop_address,
+          dropLatitude: row.drop_latitude, dropLongitude: row.drop_longitude,
+          pickupTime: row.pickup_time, departureDate: row.departure_date,
+          bagCount: row.bag_count, bagWeight: row.bag_weight,
+          airlineName: row.airline_name, flightNumber: row.flight_number,
+          assignmentDueAt: row.assignment_due_at,
+          status: row.status,
+          pickupVerified: Boolean(row.pickup_verified),
+          pickupVerifiedAt: row.pickup_verified_at,
+          pickupVerifiedByAgentName: row.pickup_verified_by_agent_name,
+          deliveryVerifiedAt: row.delivery_verified_at,
+          photos: photosArray,
+          arrivedAt: row.arrived_at,
+          assignmentStatus: row.assignment_status,
+          noShowUnlocked: row.no_show_unlocked,
         };
       }),
     });
@@ -882,7 +969,7 @@ router.post("/respond-request", async (req, res) => {
     }
     if (!resolvedAgentId) return res.status(404).json({ success: false, message: "Agent not found" });
     const queueRows = await runQuery(
-      `SELECT q.id, q.user_id, q.booking_id, q.preferred_agent_id, q.status, u.name, u.phone,
+      `SELECT q.id, q.user_id, q.booking_id, q.preferred_agent_id, q.broadcasted_agent_ids, q.status, u.name, u.phone,
               q.declined_agent_ids, b.bag_weight
        FROM agent_queue q
        JOIN users u ON u.id = q.user_id
@@ -892,12 +979,27 @@ router.post("/respond-request", async (req, res) => {
     );
     if (!queueRows.length) return res.status(404).json({ success: false, message: "Request not found" });
     const request = queueRows[0];
-    if (request.preferred_agent_id && Number(request.preferred_agent_id) !== Number(resolvedAgentId)) {
+
+    // Check if agent is allowed to respond to this request
+    let isAllowed = false;
+    if (request.preferred_agent_id && Number(request.preferred_agent_id) === Number(resolvedAgentId)) {
+      isAllowed = true;
+    } else if (request.broadcasted_agent_ids) {
+      const broadcastedIds = String(request.broadcasted_agent_ids).split(',').map(id => Number(id.trim())).filter(Boolean);
+      if (broadcastedIds.includes(resolvedAgentId)) {
+        isAllowed = true;
+      }
+    } else if (!request.preferred_agent_id) {
+      isAllowed = true;
+    }
+
+    if (!isAllowed) {
       return res.status(403).json({
         success: false,
-        message: `This request is reserved for agent ${request.preferred_agent_id}`,
+        message: `This request is not assigned to you`,
       });
     }
+
     if (action === 'accept') {
       const requiredWeightKg = parseWeightKg(request.bag_weight);
       if (Number.isFinite(requiredWeightKg)) {
@@ -919,6 +1021,29 @@ router.post("/respond-request", async (req, res) => {
       return res.status(409).json({ success: false, message: "Request is no longer waiting" });
     }
     if (action === 'decline') {
+      console.log(`[DECLINE] Agent ID ${resolvedAgentId} (${agentName || 'Agent'}) declined Booking ID ${request.booking_id}`);
+
+      // Increment ignore/decline count
+      await runQuery(
+        `UPDATE support_agents SET consecutive_ignored_count = consecutive_ignored_count + 1 WHERE agent_id = ?`,
+        [resolvedAgentId]
+      );
+
+      const agentRows = await runQuery(
+        `SELECT consecutive_ignored_count, name FROM support_agents WHERE agent_id = ? LIMIT 1`,
+        [resolvedAgentId]
+      );
+
+      if (agentRows.length && agentRows[0].consecutive_ignored_count >= 3) {
+        await runQuery(
+          `UPDATE support_agents 
+           SET status = 'inactive', cooldown_until = DATE_ADD(NOW(), INTERVAL 5 MINUTE), consecutive_ignored_count = 0 
+           WHERE agent_id = ?`,
+          [resolvedAgentId]
+        );
+        console.log(`[COOLDOWN] Agent ID ${resolvedAgentId} (${agentRows[0].name}) set to INACTIVE (cooldown) for 5 minutes due to 3 declines/ignores.`);
+      }
+
       const declinedAgentIds = parseDeclinedAgentIds(request.declined_agent_ids);
       declinedAgentIds.push(Number(resolvedAgentId));
       const declinedSerialized = serializeDeclinedAgentIds(declinedAgentIds);
@@ -936,8 +1061,8 @@ router.post("/respond-request", async (req, res) => {
         success: true, action: 'declined',
         reassigned: Boolean(nextAgentId), nextPreferredAgentId: nextAgentId,
         message: nextAgentId
-          ? `Request declined${agentName ? ` by ${agentName}` : ''}. Reassigned to next agent.`
-          : `Request declined${agentName ? ` by ${agentName}` : ''}. Waiting for next available fit.`,
+          ? `Request declined. Reassigned to next agent.`
+          : `Request declined. Waiting for next available fit.`,
       });
     }
     const existingSessionRows = await runQuery(
@@ -961,8 +1086,16 @@ router.post("/respond-request", async (req, res) => {
         },
       });
     }
+
+    const agentCoordsRows = await runQuery(
+      "SELECT latitude, longitude, name FROM support_agents WHERE agent_id = ? LIMIT 1",
+      [resolvedAgentId]
+    );
+    const agentLat = agentCoordsRows[0] ? toNumberOrNull(agentCoordsRows[0].latitude) : null;
+    const agentLng = agentCoordsRows[0] ? toNumberOrNull(agentCoordsRows[0].longitude) : null;
+
     const updateResult = await runQuery(
-      `UPDATE support_agents SET status = 'busy', current_user_id = ?, last_assigned_at = CURRENT_TIMESTAMP
+      `UPDATE support_agents SET status = 'busy', current_user_id = ?, last_assigned_at = CURRENT_TIMESTAMP, consecutive_ignored_count = 0
        WHERE agent_id = ? AND status = 'available'`,
       [request.user_id, resolvedAgentId]
     );
@@ -976,8 +1109,8 @@ router.post("/respond-request", async (req, res) => {
     );
     if (request.booking_id) {
       await runQuery(
-        "UPDATE bookings SET status = 'assigned', assignment_status = 'assigned' WHERE id = ?",
-        [request.booking_id]
+        "UPDATE bookings SET status = 'assigned', assignment_status = 'assigned', assigned_agent_id = ?, agent_start_lat = ?, agent_start_lng = ? WHERE id = ?",
+        [resolvedAgentId, agentLat, agentLng, request.booking_id]
       );
     }
     // ✅ FIXED: was WHERE queue_id = ?
@@ -985,6 +1118,7 @@ router.post("/respond-request", async (req, res) => {
       "DELETE FROM agent_queue WHERE id = ? AND status = 'waiting'",
       [queueId]
     );
+    console.log(`[ACCEPT] Agent ID ${resolvedAgentId} (${agentCoordsRows[0]?.name}) ACCEPTED Booking ID ${request.booking_id}`);
     return res.json({
       success: true, action: 'accepted',
       message: `Request accepted${agentName ? ` by ${agentName}` : ''}`,
@@ -1125,9 +1259,17 @@ router.patch("/arrived", async (req, res) => {
     const session = sessionRows[0];
     try {
       await runQuery(
-        "UPDATE bookings SET status = 'in-progress', assignment_status = 'at_pickup', destination_qr_unlocked_at = COALESCE(destination_qr_unlocked_at, CURRENT_TIMESTAMP) WHERE id = ?",
+        `UPDATE bookings 
+         SET status = 'in-progress', 
+             assignment_status = 'at_pickup', 
+             arrived_at = CURRENT_TIMESTAMP,
+             user_notified_2m = 0,
+             user_warned_4m = 0,
+             no_show_unlocked = 0 
+         WHERE id = ?`,
         [session.booking_id]
       );
+      console.log(`[ARRIVED] Agent ID ${session.agent_id} marked arrival at pickup for Booking ID ${session.booking_id}. 5-minute wait countdown started.`);
     } catch (_bookingStatusErr) {
       // keep session active even if status enum differs
     }
@@ -1170,6 +1312,194 @@ router.post("/complete-session", verifyToken, async (req, res) => {
   } catch (error) {
     console.error("complete-session error:", error);
     return res.status(500).json({ success: false, message: "Failed to complete session" });
+  }
+});
+
+// Agent messages user (in-app chat logging)
+router.post("/message", async (req, res) => {
+  const { bookingId, sender, message } = req.body || {};
+  if (!bookingId || !sender || !message) {
+    return res.status(400).json({ success: false, message: "bookingId, sender, and message are required" });
+  }
+  try {
+    await runQuery(
+      "INSERT INTO booking_messages (booking_id, sender, message) VALUES (?, ?, ?)",
+      [bookingId, sender, message]
+    );
+    console.log(`[CHAT] Message sent for Booking ID ${bookingId} by ${sender}: "${message}"`);
+    return res.json({ success: true, message: "Message logged successfully" });
+  } catch (error) {
+    console.error("log message error:", error);
+    return res.status(500).json({ success: false, message: "Failed to log message" });
+  }
+});
+
+// Get messages for chat interface
+router.get("/messages/:bookingId", async (req, res) => {
+  const { bookingId } = req.params;
+  try {
+    const rows = await runQuery(
+      "SELECT id, sender, message, created_at FROM booking_messages WHERE booking_id = ? ORDER BY created_at ASC",
+      [bookingId]
+    );
+    return res.json({ success: true, messages: rows });
+  } catch (error) {
+    console.error("get messages error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load messages" });
+  }
+});
+
+// Agent arrived at airport
+router.patch("/arrived-airport", async (req, res) => {
+  const { bookingId } = req.body || {};
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: "bookingId is required" });
+  }
+  try {
+    await runQuery(
+      "UPDATE bookings SET status = 'in-progress', assignment_status = 'at_airport', destination_qr_unlocked_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [bookingId]
+    );
+    console.log(`[AIRPORT ARRIVAL] Booking ID ${bookingId} marked as arrived at airport.`);
+    return res.json({ success: true, message: "Arrived at airport successfully" });
+  } catch (error) {
+    console.error("arrived-airport error:", error);
+    return res.status(500).json({ success: false, message: "Failed to mark airport arrival" });
+  }
+});
+
+// Agent marks user as "No Show" cancellation
+router.post("/no-show", async (req, res) => {
+  const { bookingId, agentId } = req.body || {};
+  if (!bookingId || !agentId) {
+    return res.status(400).json({ success: false, message: "bookingId and agentId are required" });
+  }
+  try {
+    // 1. Fetch booking details
+    const bookingRows = await runQuery(
+      "SELECT * FROM bookings WHERE id = ? LIMIT 1",
+      [bookingId]
+    );
+    if (!bookingRows.length) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+    const booking = bookingRows[0];
+
+    // 2. Validate booking status
+    if (booking.status !== 'in-progress' || booking.assignment_status !== 'at_pickup') {
+      return res.status(400).json({
+        success: false,
+        message: "Booking is not in progress at pickup status"
+      });
+    }
+
+    // 3. Validate arrived_at wait timer (at least 5 minutes)
+    if (!booking.arrived_at) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent has not marked arrival yet"
+      });
+    }
+    const elapsedSeconds = (Date.now() - new Date(booking.arrived_at).getTime()) / 1000;
+    if (elapsedSeconds < 300) {
+      const waitRemaining = Math.ceil(300 - elapsedSeconds);
+      return res.status(400).json({
+        success: false,
+        message: `You must wait at least 5 minutes. ${waitRemaining} seconds remaining.`
+      });
+    }
+
+    // 4. Validate due diligence (at least 1 message sent by agent)
+    const messageRows = await runQuery(
+      "SELECT id FROM booking_messages WHERE booking_id = ? AND sender = 'agent' LIMIT 1",
+      [bookingId]
+    );
+    if (!messageRows.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Due diligence required: You must send at least one in-app message or call the user before marking no-show."
+      });
+    }
+
+    // 5. Calculate travel distance & cancellation fee
+    const agentStartLat = toNumberOrNull(booking.agent_start_lat);
+    const agentStartLng = toNumberOrNull(booking.agent_start_lng);
+    const pickupLat = toNumberOrNull(booking.pickup_latitude);
+    const pickupLng = toNumberOrNull(booking.pickup_longitude);
+
+    let distanceKm = 0;
+    if (agentStartLat !== null && agentStartLng !== null && pickupLat !== null && pickupLng !== null) {
+      distanceKm = haversineKm(agentStartLat, agentStartLng, pickupLat, pickupLng);
+    }
+    // Cancellation fee: agent traveled total km cost (Rate: 10 Rs/km)
+    const cancellationFee = Number((distanceKm * 10).toFixed(2));
+
+    // 6. Save fee on user's profile to charge on next booking
+    const userPhoneClean = booking.phone;
+    const userPhoneAlt = booking.phone?.startsWith("+91") ? booking.phone.slice(3) : `+91${booking.phone}`;
+    
+    await runQuery(
+      "UPDATE users SET pending_cancellation_fee = pending_cancellation_fee + ? WHERE phone = ? OR phone = ?",
+      [cancellationFee, userPhoneClean, userPhoneAlt]
+    );
+
+    // 7. Cancel the booking
+    await runQuery(
+      "UPDATE bookings SET status = 'cancelled', assignment_status = 'no_show', cancellation_reason = 'no-show' WHERE id = ?",
+      [bookingId]
+    );
+
+    // 8. Reset agent availability and complete session
+    await runQuery(
+      "UPDATE support_agents SET status = 'available', current_user_id = NULL WHERE agent_id = ?",
+      [agentId]
+    );
+
+    await runQuery(
+      "UPDATE agent_sessions SET status = 'completed', end_time = CURRENT_TIMESTAMP WHERE booking_id = ? AND status = 'active'",
+      [bookingId]
+    );
+
+    console.log(`[NO-SHOW] [CANCELLED] Booking ID ${bookingId} cancelled as NO-SHOW by Agent ID ${agentId}. Travel distance: ${distanceKm.toFixed(2)} km. Cancellation fee of ${cancellationFee} Rs charged to user's next booking.`);
+
+    return res.json({
+      success: true,
+      cancellationFee,
+      message: `Booking cancelled successfully due to customer no-show. Cancellation fee of ${cancellationFee} Rs will be charged on next booking.`
+    });
+  } catch (error) {
+    console.error("no-show error:", error);
+    return res.status(500).json({ success: false, message: "Failed to mark no-show" });
+  }
+});
+
+// Get agent profile by ID
+router.get("/profile/:agentId", async (req, res) => {
+  const { agentId } = req.params;
+
+  try {
+    const agents = await runQuery("SELECT * FROM support_agents WHERE agent_id = ?", [agentId]);
+    if (!agents.length) {
+      return res.status(404).json({ success: false, message: "Agent not found" });
+    }
+
+    const agent = agents[0];
+    res.json({
+      success: true,
+      agent: {
+        agentId: agent.agent_id,
+        name: agent.name,
+        phone: agent.phone,
+        status: agent.status,
+        latitude: agent.latitude ? Number(agent.latitude) : null,
+        longitude: agent.longitude ? Number(agent.longitude) : null,
+        vehicleType: agent.vehicle_type,
+        vehicleNumber: agent.vehicle_type || 'Vehicle pending'
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching agent profile:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch agent profile", error: error.message });
   }
 });
 

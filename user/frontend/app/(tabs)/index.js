@@ -22,7 +22,7 @@ export default function Home() {
   const [userPhone, setUserPhone] = useState("");
 
   const displayInitial = displayName.charAt(0).toUpperCase();
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/bookings`;
+  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://172.16.111.44:5000'}/api/bookings`;
 
   // Fetch latest booking
   const fetchLatestBooking = async () => {
@@ -565,3 +565,4 @@ const styles = StyleSheet.create({
   deliveredText: { fontSize: 11, color: '#6B7280', fontWeight: '700' },
   divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 15 },
 });
+

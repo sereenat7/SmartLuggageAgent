@@ -10,6 +10,7 @@ import TaskDetailsScreen from '../screens/TaskDetailsScreen';
 import AgentTrackingScreen from '../screens/AgentTrackingScreen';
 import ProfileScreen    from '../screens/ProfileScreen';
 import AgentRouteMapScreen from '../screens/AgentRouteMapScreen';
+import AgentAirportMapScreen from '../screens/AgentAirportMapScreen';
 import QrScannerScreen from '../screens/QrScannerScreen';
 import QrVerificationScreen from '../screens/QrVerificationScreen';
 
@@ -45,6 +46,7 @@ export default function RootNavigator() {
       <Stack.Screen name="QrVerification" component={QrVerificationScreen} options={{ headerShown: false }} />
       <Stack.Screen name="AgentTracking" component={AgentTrackingScreen} options={{ headerShown: false }} />
       <Stack.Screen name="AgentRouteMap" component={AgentRouteMapScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="AgentAirportMap" component={AgentAirportMapScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Profile"     component={ProfileScreen}      options={{ headerShown: false }} />
     </Stack.Navigator>
 

@@ -19,7 +19,7 @@ import { triggerLoginNotification } from "../../utils/notificationService";
 export default function LoginScreen() {
   const params = useLocalSearchParams();
   const phoneFromParams = params?.phone?.replace("+91", "") || "";
-  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000';
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.16.111.44:5000';
 
   const [mode, setMode] = useState("password");
   const [focus, setFocus] = useState("");
@@ -227,3 +227,4 @@ const styles = StyleSheet.create({
   bottomText: { textAlign: "center", marginTop: 20, color: "gray" },
   register: { color: "#ff6600", fontWeight: "bold" }
 });
+

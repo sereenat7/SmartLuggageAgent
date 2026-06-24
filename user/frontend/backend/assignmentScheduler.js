@@ -171,12 +171,12 @@ const greedyRankAgents = (candidates, context = {}) => {
   return selected;
 };
 
-const getBestAgentForBooking = async (booking) => {
+const getBestAgentsForBooking = async (booking, limit = 3) => {
   const userLat = toNumberOrNull(booking.pickup_latitude);
   const userLng = toNumberOrNull(booking.pickup_longitude);
 
   if (userLat === null || userLng === null) {
-    return null;
+    return [];
   }
 
   const userH3 = latLngToCell(userLat, userLng, H3_RESOLUTION);
@@ -191,6 +191,7 @@ const getBestAgentForBooking = async (booking) => {
      FROM support_agents a
      LEFT JOIN agent_sessions s ON s.agent_id = a.agent_id AND s.status = 'active'
      WHERE a.status = 'available'
+       AND (a.cooldown_until IS NULL OR a.cooldown_until <= CURRENT_TIMESTAMP)
        AND a.latitude IS NOT NULL
        AND a.longitude IS NOT NULL
     GROUP BY a.agent_id, a.name, a.phone, a.status, a.latitude, a.longitude, a.h3_index,
@@ -230,11 +231,14 @@ const getBestAgentForBooking = async (booking) => {
     checkinRequired,
   });
 
-  return ranked.find((candidate) => candidate.fit !== false) || null;
+  return ranked
+    .filter((candidate) => candidate.fit !== false)
+    .slice(0, limit);
 };
 
-const queueBookingForAgentDashboard = async (booking, bestAgent) => {
-  const preferredAgentId = bestAgent?.agentId || null;
+const queueBookingForAgentDashboard = async (booking, bestAgents) => {
+  const preferredAgentId = bestAgents[0]?.agentId || null;
+  const broadcastedAgentIds = bestAgents.map(a => a.agentId).join(',');
 
   const userRows = await runQuery(
     `SELECT id FROM users WHERE phone = ? OR phone = ? LIMIT 1`,
@@ -247,14 +251,15 @@ const queueBookingForAgentDashboard = async (booking, bestAgent) => {
   }
 
   await runQuery(
-    `INSERT INTO agent_queue (user_id, booking_id, preferred_agent_id, status)
-     VALUES (?, ?, ?, 'waiting')
+    `INSERT INTO agent_queue (user_id, booking_id, preferred_agent_id, broadcasted_agent_ids, status)
+     VALUES (?, ?, ?, ?, 'waiting')
      ON DUPLICATE KEY UPDATE
        booking_id = VALUES(booking_id),
        preferred_agent_id = VALUES(preferred_agent_id),
+       broadcasted_agent_ids = VALUES(broadcasted_agent_ids),
        declined_agent_ids = NULL,
        updated_at = CURRENT_TIMESTAMP`,
-    [userId, booking.id, preferredAgentId]
+    [userId, booking.id, preferredAgentId, broadcastedAgentIds]
   );
 
   await runQuery(
@@ -266,6 +271,7 @@ const queueBookingForAgentDashboard = async (booking, bestAgent) => {
 
   return {
     preferredAgentId,
+    broadcastedAgentIds,
   };
 };
 
@@ -282,34 +288,182 @@ const processDueBookings = async () => {
      LIMIT 25`
   );
 
-  // console.log(`📋 [Scheduler] Found ${dueBookings.length} due bookings to assign (future pickups only - 5 min before)`);
-
-  // Check available agents
-  const availableAgents = await runQuery(
-    `SELECT agent_id, name, phone, latitude, longitude, status 
-     FROM support_agents 
-     WHERE status = 'available' 
-       AND latitude IS NOT NULL 
-       AND longitude IS NOT NULL`
-  );
-  // console.log(`👥 [Scheduler] Available agents: ${availableAgents.length}`);
-  // if (availableAgents.length > 0) {
-  //   availableAgents.forEach(a => {
-  //     console.log(`   - Agent ${a.agent_id}: ${a.name} (${a.phone}) at ${a.latitude}, ${a.longitude}`);
-  //   });
-  // }
-
   for (const booking of dueBookings) {
     try {
-      const bestAgent = await getBestAgentForBooking(booking);
-      await queueBookingForAgentDashboard(booking, bestAgent);
-      if (bestAgent) {
-        console.log(`✅ Booking ${booking.id} assigned to Agent ${bestAgent.agentId} (${bestAgent.name})`);
+      const bestAgents = await getBestAgentsForBooking(booking, 3);
+      if (bestAgents.length > 0) {
+        await queueBookingForAgentDashboard(booking, bestAgents);
+        console.log(`✅ [BROADCAST] Booking ${booking.id} broadcasted to Agents: ${bestAgents.map(a => a.agentId).join(', ')}`);
       } else {
-        console.log(`⚠️ Booking ${booking.id} queued but NO agent found nearby`);
+        console.log(`⚠️ Booking ${booking.id} queued but NO active agents found nearby`);
       }
     } catch (error) {
       console.error(`❌ Failed to queue booking ${booking.id}:`, error.message);
+    }
+  }
+};
+
+const manageAgentAvailabilityAndQueues = async () => {
+  // 0. Auto-clear expired agent cooldowns
+  await runQuery(
+    `UPDATE support_agents 
+     SET status = 'available', cooldown_until = NULL 
+     WHERE status = 'inactive' AND cooldown_until IS NOT NULL AND cooldown_until <= CURRENT_TIMESTAMP`
+  );
+
+  // 1. Process active queues (status = 'waiting')
+  const activeQueues = await runQuery(
+    `SELECT q.id, q.booking_id, q.user_id, q.preferred_agent_id, q.broadcasted_agent_ids, q.declined_agent_ids, q.updated_at, q.requested_at,
+            b.pickup_latitude, b.pickup_longitude, b.bag_weight, b.is_fragile, b.is_checkin, b.surge_bonus, b.amount, b.phone
+     FROM agent_queue q
+     JOIN bookings b ON b.id = q.booking_id
+     WHERE q.status = 'waiting'`
+  );
+
+  for (const queue of activeQueues) {
+    const nowMs = Date.now();
+    const secondsWaiting = (nowMs - new Date(queue.updated_at).getTime()) / 1000;
+    const totalSecondsInQueue = (nowMs - new Date(queue.requested_at).getTime()) / 1000;
+
+    // --- A. Timeout & Re-routing (20 seconds) ---
+    if (secondsWaiting >= 20) {
+      console.log(`[TIMEOUT] Booking ID ${queue.booking_id} request timed out after 20s of no agent acceptance.`);
+      
+      const currentAgents = queue.broadcasted_agent_ids
+        ? queue.broadcasted_agent_ids.split(',').map(id => Number(id.trim())).filter(Boolean)
+        : (queue.preferred_agent_id ? [Number(queue.preferred_agent_id)] : []);
+      
+      const declinedAgentIds = queue.declined_agent_ids
+        ? queue.declined_agent_ids.split(',').map(id => Number(id.trim())).filter(Boolean)
+        : [];
+
+      for (const agentId of currentAgents) {
+        if (!declinedAgentIds.includes(agentId)) {
+          await runQuery(
+            `UPDATE support_agents 
+             SET consecutive_ignored_count = consecutive_ignored_count + 1 
+             WHERE agent_id = ?`,
+            [agentId]
+          );
+          
+          const agentRows = await runQuery(
+            `SELECT consecutive_ignored_count, name FROM support_agents WHERE agent_id = ? LIMIT 1`,
+            [agentId]
+          );
+          
+          if (agentRows.length && agentRows[0].consecutive_ignored_count >= 3) {
+            await runQuery(
+              `UPDATE support_agents 
+               SET status = 'inactive', cooldown_until = DATE_ADD(NOW(), INTERVAL 5 MINUTE), consecutive_ignored_count = 0 
+               WHERE agent_id = ?`,
+              [agentId]
+            );
+            console.log(`[COOLDOWN] Agent ID ${agentId} (${agentRows[0].name}) set to INACTIVE (cooldown) for 5 minutes due to 3 ignores/declines.`);
+          } else if (agentRows.length) {
+            console.log(`[IGNORE] Agent ID ${agentId} (${agentRows[0].name}) ignored request. Consecutive ignore count: ${agentRows[0].consecutive_ignored_count}`);
+          }
+          
+          declinedAgentIds.push(agentId);
+        }
+      }
+
+      const declinedSerialized = declinedAgentIds.join(',');
+      const nextAgents = await getBestAgentsForBooking(queue, 3);
+      const freshAgents = nextAgents.filter(a => !declinedAgentIds.includes(a.agentId));
+
+      if (freshAgents.length > 0) {
+        const nextPreferred = freshAgents[0].agentId;
+        const nextBroadcast = freshAgents.map(a => a.agentId).join(',');
+        
+        await runQuery(
+          `UPDATE agent_queue 
+           SET preferred_agent_id = ?, broadcasted_agent_ids = ?, declined_agent_ids = ?, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = ?`,
+          [nextPreferred, nextBroadcast, declinedSerialized, queue.id]
+        );
+        console.log(`[RE-ROUTE] Booking ID ${queue.booking_id} re-routed to new agents: ${nextBroadcast}`);
+      } else {
+        await runQuery(
+          `UPDATE agent_queue 
+           SET preferred_agent_id = NULL, broadcasted_agent_ids = NULL, declined_agent_ids = ?, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = ?`,
+          [declinedSerialized, queue.id]
+        );
+        console.log(`[WAITING] Booking ID ${queue.booking_id} has no new available agents nearby. Retrying later.`);
+      }
+    }
+
+    // --- B. Surge Incentives (gradual +10 Rs every 30 seconds) ---
+    const expectedSurge = Math.min(100, Math.floor(totalSecondsInQueue / 30) * 10);
+    const currentSurge = Number(queue.surge_bonus || 0);
+    if (expectedSurge > currentSurge) {
+      const addition = expectedSurge - currentSurge;
+      await runQuery(
+        `UPDATE bookings SET surge_bonus = ?, amount = amount + ? WHERE id = ?`,
+        [expectedSurge, addition, queue.booking_id]
+      );
+      console.log(`[SURGE] Added +${addition} Rs surge incentive to booking ID ${queue.booking_id} due to non-acceptance. Total surge: ${expectedSurge} Rs.`);
+    }
+  }
+
+  // 2. Process arrived bookings wait-timer warnings (Edge Case 4)
+  const arrivedBookings = await runQuery(
+    `SELECT id, arrived_at, user_notified_2m, user_warned_4m, no_show_unlocked, username
+     FROM bookings
+     WHERE status = 'in-progress' AND assignment_status = 'at_pickup' AND arrived_at IS NOT NULL`
+  );
+
+  for (const booking of arrivedBookings) {
+    const elapsedSeconds = (Date.now() - new Date(booking.arrived_at).getTime()) / 1000;
+
+    if (elapsedSeconds >= 120 && !booking.user_notified_2m) {
+      await runQuery(`UPDATE bookings SET user_notified_2m = 1 WHERE id = ?`, [booking.id]);
+      console.log(`[NOTIFY] [ALERT-2M] User '${booking.username}' (Booking ID ${booking.id}) absent for 2 minutes. Simulated push notification + IVR call triggered.`);
+    }
+
+    if (elapsedSeconds >= 240 && !booking.user_warned_4m) {
+      await runQuery(`UPDATE bookings SET user_warned_4m = 1 WHERE id = ?`, [booking.id]);
+      console.log(`[WARN] [ALERT-4M] User '${booking.username}' (Booking ID ${booking.id}) absent for 4 minutes. Critical warning sent: agent will leave in 1 minute.`);
+    }
+
+    if (elapsedSeconds >= 300 && !booking.no_show_unlocked) {
+      await runQuery(`UPDATE bookings SET no_show_unlocked = 1 WHERE id = ?`, [booking.id]);
+      console.log(`[UNLOCK-5M] Booking ID ${booking.id}: Countdown finished. 'No Show' cancellation option unlocked for the agent.`);
+    }
+  }
+
+  // 3. Process agent availability & auto-offline (Edge Case 5)
+  const activeAgents = await runQuery(
+    `SELECT agent_id, name, status, location_updated_at, last_heartbeat_at, availability_check_sent_at
+     FROM support_agents
+     WHERE status IN ('available', 'busy', 'inactive')`
+  );
+
+  for (const agent of activeAgents) {
+    const lastActivity = agent.last_heartbeat_at || agent.location_updated_at;
+    if (!lastActivity) continue;
+
+    const secondsIdle = (Date.now() - new Date(lastActivity).getTime()) / 1000;
+
+    if (secondsIdle >= 600) { // 10 minutes
+      if (!agent.availability_check_sent_at) {
+        await runQuery(
+          `UPDATE support_agents SET availability_check_sent_at = CURRENT_TIMESTAMP WHERE agent_id = ?`,
+          [agent.agent_id]
+        );
+        console.log(`[IDLE CHECK] Agent ID ${agent.agent_id} (${agent.name}) idle for 10+ minutes. Sent availability confirmation request.`);
+      } else {
+        const secondsCheckWaiting = (Date.now() - new Date(agent.availability_check_sent_at).getTime()) / 1000;
+        if (secondsCheckWaiting >= 60) {
+          await runQuery(
+            `UPDATE support_agents 
+             SET status = 'offline', availability_check_sent_at = NULL, consecutive_ignored_count = 0 
+             WHERE agent_id = ?`,
+            [agent.agent_id]
+          );
+          console.log(`[AUTO OFFLINE] Agent ID ${agent.agent_id} (${agent.name}) failed availability response. Auto-set status to OFFLINE.`);
+        }
+      }
     }
   }
 };
@@ -319,13 +473,20 @@ const startBookingAssignmentScheduler = () => {
     processDueBookings().catch((error) => {
       console.error("Booking assignment scheduler error:", error.message);
     });
+    manageAgentAvailabilityAndQueues().catch((error) => {
+      console.error("Availability and queue management error:", error.message);
+    });
   };
 
   runOnce();
-  const timer = setInterval(runOnce, SCHEDULER_INTERVAL_MS);
+  const timer = setInterval(runOnce, 10000); // 10 seconds interval
   return timer;
 };
 
 module.exports = {
   startBookingAssignmentScheduler,
+  processDueBookings,
+  manageAgentAvailabilityAndQueues,
+  getBestAgentsForBooking,
+  queueBookingForAgentDashboard
 };
