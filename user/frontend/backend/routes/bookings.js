@@ -556,7 +556,8 @@ router.get("/inbox", (req, res) => {
              b.drop_address, b.drop_latitude, b.drop_longitude,
              b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
              b.airline_name, b.flight_number, b.additional_info, b.terminal,
-             b.departure_city, b.arrival_city
+             b.departure_city, b.arrival_city,
+             b.status, b.pickup_verified, b.pickup_verified_at, b.pickup_verified_by_agent_name, b.delivery_verified_at
       FROM agent_sessions s
       JOIN users u ON u.id = s.user_id
       JOIN support_agents a ON a.agent_id = s.agent_id
@@ -615,7 +616,11 @@ router.get("/inbox", (req, res) => {
           departureCity: row.departure_city,
           arrivalCity: row.arrival_city,
           additionalInfo: row.additional_info,
-          status: 'in-progress',
+          status: row.status,
+          pickupVerified: Boolean(row.pickup_verified),
+          pickupVerifiedAt: row.pickup_verified_at,
+          pickupVerifiedByAgentName: row.pickup_verified_by_agent_name,
+          deliveryVerifiedAt: row.delivery_verified_at
         }))
       });
     });

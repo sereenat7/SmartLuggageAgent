@@ -108,9 +108,18 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
   useEffect(() => {
     const verifiedFromRoute = Boolean(route?.params?.pickupVerified || route?.params?.pickupVerificationDetails);
-    if (verifiedFromRoute) {
+    const verifiedFromBooking = Boolean(
+      booking?.pickupVerified || 
+      booking?.pickup_verified || 
+      booking?.pickupVerifiedAt || 
+      booking?.pickup_verified_at
+    );
+    
+    if (verifiedFromRoute || verifiedFromBooking) {
       setPickupConfirmed(true);
-      setPickupVerificationDetails(route?.params?.pickupVerificationDetails || null);
+      if (verifiedFromRoute && route?.params?.pickupVerificationDetails) {
+        setPickupVerificationDetails(route.params.pickupVerificationDetails);
+      }
       setCurrentStatus('picked_up');
       return;
     }
@@ -118,7 +127,7 @@ export default function TaskDetailsScreen({ navigation, route }) {
     if (normalizeStatus(booking?.status) === 'on-the-way' || normalizeStatus(booking?.status) === 'on_the_way' || normalizeStatus(booking?.status) === 'picked_up') {
       setPickupConfirmed(true);
     }
-  }, [booking?.status, route?.params?.pickupVerified, route?.params?.pickupVerificationDetails]);
+  }, [booking?.status, booking?.pickupVerified, booking?.pickup_verified, route?.params?.pickupVerified, route?.params?.pickupVerificationDetails]);
 
   // Resend OTP timer
   useEffect(() => {
@@ -395,8 +404,11 @@ export default function TaskDetailsScreen({ navigation, route }) {
           style={styles.keyboardContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
-
+          <ScrollView 
+            style={styles.scrollContent} 
+            contentContainerStyle={{ paddingBottom: 40 }}
+            showsVerticalScrollIndicator={false}
+          >
             {/* Customer Card */}
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Customer Information</Text>

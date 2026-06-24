@@ -767,7 +767,8 @@ router.get("/inbox", async (req, res) => {
               b.pickup_address, b.pickup_latitude, b.pickup_longitude,
               b.drop_address, b.drop_latitude, b.drop_longitude,
               b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
-              b.airline_name, b.flight_number, b.assignment_due_at, b.photos
+              b.airline_name, b.flight_number, b.assignment_due_at, b.photos,
+              b.status, b.pickup_verified, b.pickup_verified_at, b.pickup_verified_by_agent_name, b.delivery_verified_at
           FROM agent_sessions s
           JOIN support_agents a ON a.agent_id = s.agent_id
           JOIN users u ON u.id = s.user_id
@@ -778,7 +779,8 @@ router.get("/inbox", async (req, res) => {
               b.pickup_address, b.pickup_latitude, b.pickup_longitude,
               b.drop_address, b.drop_latitude, b.drop_longitude,
               b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
-              b.airline_name, b.flight_number, b.assignment_due_at, b.photos
+              b.airline_name, b.flight_number, b.assignment_due_at, b.photos,
+              b.status, b.pickup_verified, b.pickup_verified_at, b.pickup_verified_by_agent_name, b.delivery_verified_at
           FROM agent_sessions s
           JOIN support_agents a ON a.agent_id = s.agent_id
           JOIN users u ON u.id = s.user_id
@@ -840,6 +842,11 @@ router.get("/inbox", async (req, res) => {
           bagCount: row.bag_count, bagWeight: row.bag_weight,
           airlineName: row.airline_name, flightNumber: row.flight_number,
           assignmentDueAt: row.assignment_due_at,
+          status: row.status,
+          pickupVerified: Boolean(row.pickup_verified),
+          pickupVerifiedAt: row.pickup_verified_at,
+          pickupVerifiedByAgentName: row.pickup_verified_by_agent_name,
+          deliveryVerifiedAt: row.delivery_verified_at,
           photos: photosArray,
         };
       }),

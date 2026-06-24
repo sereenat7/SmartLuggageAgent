@@ -188,12 +188,12 @@ export default function DashboardScreen({ navigation, route }) {
 
   useFocusEffect(
     useCallback(() => {
+      fetchInbox(); // Always refresh when returning to dashboard
       if (route.params?.activeTab) {
         setActiveTab(route.params.activeTab);
         navigation.setParams({ activeTab: undefined });
       }
       if (route.params?.refreshInbox) {
-        fetchInbox();
         navigation.setParams({ refreshInbox: undefined });
       }
     }, [fetchInbox, navigation, route.params?.activeTab, route.params?.refreshInbox]),
@@ -316,6 +316,7 @@ export default function DashboardScreen({ navigation, route }) {
   };
 
   const buildTaskFromSession = (session) => ({
+    ...session,
     id: `session-${session.sessionId}`,
     sessionId: session.sessionId,
     bookingId: session.bookingId || session.booking_id || null,
@@ -327,7 +328,7 @@ export default function DashboardScreen({ navigation, route }) {
     dropLocation: session.dropLocation || session.dropAddress || session.drop_address || 'Drop location pending',
     timeSlot: session.timeSlot || session.pickupTime || 'Time slot pending',
     luggage: Number(session.luggage || session.bagCount || session.bag_count || 1),
-    status: 'in-progress',
+    status: session.status || 'in-progress',
     phoneNumber: session.userPhone || '',
     pickupLatitude: session.pickupLatitude,
     pickupLongitude: session.pickupLongitude,
