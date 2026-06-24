@@ -193,10 +193,11 @@ const parseResponseJson = async (response) => {
   }
 };
 
-export const startBookingTask = async (bookingId) => {
+export const startBookingTask = async (bookingId, agentId = null) => {
   const response = await fetch(`${USER_API_URL}/api/bookings/start/${bookingId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentId: agentId || undefined }),
   });
 
   const data = await parseResponseJson(response);

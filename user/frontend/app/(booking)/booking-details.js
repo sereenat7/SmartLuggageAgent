@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   SafeAreaView, StatusBar, ActivityIndicator, Alert, Platform, Modal
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import bookingSync from '../../utils/bookingSync';
+import * as bookingSync from '../../utils/bookingSync';
 
 export default function BookingDetailsScreen() {
   const router = useRouter();
@@ -17,32 +17,24 @@ export default function BookingDetailsScreen() {
   const [cancellationModalVisible, setCancellationModalVisible] = useState(false);
   const [cancellationDetails, setCancellationDetails] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const pollingRef = useRef(null);
 
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/bookings`;
+  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.127:5000'}/api/bookings`;
 
-  useEffect(() => {
-    fetchBookingDetails();
-  }, []);
-
-  const handleTrackBooking = async () => {
-    if (!bookingId) return;
-    await AsyncStorage.setItem('activeTrackBookingId', String(bookingId));
-    router.push({
-      pathname: '/(tabs)/track',
-      params: { bookingId: String(bookingId) }
-    });
-  };
-
-  const fetchBookingDetails = async () => {
+  const fetchBookingDetails = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('authToken');
       if (!token) {
         Alert.alert("Error", "Not authenticated");
-        return;
+        return null;
       }
 
-      const response = await fetch(`${API_URL}/${bookingId}`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await fetch(`${API_URL}/${bookingId}?_t=${Date.now()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Cache-Control': 'no-cache',
+          Pragma: 'no-cache',
+        },
       });
 
       const data = await response.json();
@@ -50,23 +42,86 @@ export default function BookingDetailsScreen() {
 
       if (data.success && data.booking) {
         setBooking(data.booking);
-      } else {
-        Alert.alert("Error", "Could not load booking details");
+        return token;
       }
+      return null;
     } catch (error) {
-      console.error("❌ Error fetching booking:", error);
+      console.error('Error fetching booking:', error);
       Alert.alert("Error", "Failed to load booking details");
+      return null;
     } finally {
       setLoading(false);
     }
+  }, [API_URL, bookingId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const bootstrap = async () => {
+        setLoading(true);
+        const token = await fetchBookingDetails();
+        if (!isActive || !token || !bookingId) return;
+
+        if (pollingRef.current) {
+          bookingSync.stopBookingPolling(pollingRef.current);
+        }
+
+        pollingRef.current = bookingSync.startBookingPolling(
+          bookingId,
+          token,
+          (updatedBooking) => {
+            if (!isActive) return;
+            setBooking(updatedBooking);
+          },
+          5000
+        );
+      };
+
+      bootstrap();
+
+      return () => {
+        isActive = false;
+        if (pollingRef.current) {
+          bookingSync.stopBookingPolling(pollingRef.current);
+          pollingRef.current = null;
+        }
+      };
+    }, [bookingId, fetchBookingDetails])
+  );
+
+  const handleTrackBooking = async () => {
+    if (!bookingId) return;
+    await bookingSync.setActiveTrackingBooking(bookingId);
+    router.push({
+      pathname: '/(tabs)/track',
+      params: { bookingId: String(bookingId) }
+    });
   };
 
   const isCancellable = () => {
     if (!booking) return false;
-    const status = (booking.status || booking.booking_status || '').toLowerCase();
-    // Can cancel: pending, queued, agent_assigned, in_progress
-    // Cannot cancel: on_the_way, completed, cancelled
-    return !['on_the_way', 'completed', 'cancelled'].includes(status);
+    const stage = bookingSync.getBookingStage(booking);
+    // Stages 1-3: Booking Confirmed, Agent Assigned, In Progress
+    return stage >= 1 && stage <= 3;
+  };
+
+  const getCancellationPreview = () => {
+    if (!booking) return { fee: 0, refund: 0 };
+    const totalAmount = Number(booking.amount || 0);
+    const stage = bookingSync.getBookingStage(booking);
+
+    if (stage <= 1) {
+      return { fee: 0, refund: totalAmount };
+    }
+    if (stage === 2) {
+      return { fee: 0, refund: totalAmount };
+    }
+    if (stage === 3) {
+      const fee = 150;
+      return { fee, refund: Math.max(totalAmount - fee, 0) };
+    }
+    return { fee: 0, refund: 0 };
   };
 
   const handleCancelClick = async () => {
@@ -75,19 +130,9 @@ export default function BookingDetailsScreen() {
       return;
     }
 
-    // First, check if we need to show breakdown
-    const status = (booking.status || booking.booking_status || '').toLowerCase();
-    
-    if (status === 'queued' || status === 'agent_assigned') {
-      // Show cancellation breakdown for Agent Assigned
-      setCancellationModalVisible(true);
-    } else if (status === 'in_progress') {
-      // Show cancellation breakdown for In Progress
-      setCancellationModalVisible(true);
-    } else if (status === 'pending') {
-      // For pending, show quick confirmation
-      setCancellationModalVisible(true);
-    }
+    const preview = getCancellationPreview();
+    setCancellationDetails(preview);
+    setCancellationModalVisible(true);
   };
 
   const confirmCancellation = async () => {
@@ -124,6 +169,7 @@ export default function BookingDetailsScreen() {
         
         // Clear booking cache to ensure fresh data on homepage
         await bookingSync.clearBookingCache(bookingId);
+        await bookingSync.setActiveTrackingBooking(null);
         
         Alert.alert("Success", `Booking cancelled successfully!\n\nRefund Amount: ₹${refundAmount}`, [
           {
@@ -168,32 +214,17 @@ export default function BookingDetailsScreen() {
     );
   }
 
-  const getStatusColor = (status) => {
-    const statusLower = (status || '').toLowerCase();
-    switch(statusLower) {
-      case 'assigned': return '#FF9800';
-      case 'in transit': case 'picked': return '#2196F3';
-      case 'delivered': case 'completed': return '#4CAF50';
-      case 'cancelled': return '#F44336';
-      default: return '#999';
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    const statusLower = (status || '').toLowerCase();
-    switch(statusLower) {
-      case 'assigned': return 'Assigned';
-      case 'in transit': case 'picked': return 'In Transit';
-      case 'delivered': case 'completed': return 'Delivered';
-      case 'cancelled': return 'Cancelled';
-      case 'pending': return 'Booking Confirmed';
-      case 'queued': return 'Booking Confirmed';
-      case 'agent_assigned': return 'Agent Assigned';
-      case 'in_progress': return 'In Progress';
-      case 'on_the_way': return 'On the Way';
-      default: return status;
-    }
-  };
+  const trackingLabel = bookingSync.getTrackingStatusLabel(booking);
+  const trackingStage = bookingSync.getBookingStage(booking);
+  const statusColor = bookingSync.isCancelledBooking(booking)
+    ? '#F44336'
+    : trackingStage >= 5
+      ? '#4CAF50'
+      : trackingStage >= 3
+        ? '#2196F3'
+        : trackingStage >= 2
+          ? '#FF9800'
+          : '#999';
 
   const renderSection = (title, icon, content) => (
     <View style={styles.section}>
@@ -234,12 +265,12 @@ export default function BookingDetailsScreen() {
         contentContainerStyle={styles.scrollInner}
       >
         {/* STATUS CARD - Now with extra margin top to bring it down */}
-        <View style={[styles.statusCard, { borderLeftColor: getStatusColor(booking.status || booking.booking_status) }]}> 
+        <View style={[styles.statusCard, { borderLeftColor: statusColor }]}> 
           <View style={styles.statusCardContent}> 
             <Text style={styles.bookingNumber}>Booking #{booking.id || booking.booking_id}</Text> 
             <View style={styles.statusRow}> 
-              <View style={[styles.statusDot, { backgroundColor: getStatusColor(booking.status || booking.booking_status) }]} /> 
-              <Text style={styles.statusLabel}>{getStatusLabel(booking.status || booking.booking_status)}</Text> 
+              <View style={[styles.statusDot, { backgroundColor: statusColor }]} /> 
+              <Text style={styles.statusLabel}>{trackingLabel}</Text> 
             </View>
           </View>
           <View style={styles.paymentBadge}>
@@ -247,6 +278,26 @@ export default function BookingDetailsScreen() {
             <Text style={styles.paymentText}>Paid</Text>
           </View>
         </View>
+
+        {/* TRACKING TIMELINE */}
+        {renderSection(
+          'Tracking Progress',
+          'clock-time-eight',
+          <View style={styles.timeline}>
+            {bookingSync.buildTimeline(booking).map((item, index) => (
+              <View key={index}>
+                <View style={styles.timelineItem}>
+                  <View style={[styles.timelineDot, { backgroundColor: item.active ? '#ff6600' : '#cbd5e1' }]} />
+                  <View style={styles.timelineContent}>
+                    <Text style={styles.timelineStatus}>{item.title}</Text>
+                    <Text style={styles.timelineTime}>{item.timestamp}</Text>
+                  </View>
+                </View>
+                {index < bookingSync.buildTimeline(booking).length - 1 && <View style={styles.timelineLine} />}
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Flight Details */}
         {renderSection(
@@ -310,7 +361,7 @@ export default function BookingDetailsScreen() {
 
       {/* FIXED BOTTOM ACTION BAR */}
       <View style={styles.bottomButtonContainer}>
-        {(booking.status === 'cancelled' || booking.booking_status === 'cancelled') ? (
+        {(bookingSync.isCancelledBooking(booking)) ? (
           <View style={styles.cancelledNotice}>
             <MaterialCommunityIcons name="information-outline" size={20} color="#F44336" />
             <Text style={styles.cancelledNoticeText}>This booking has been cancelled</Text>
@@ -371,7 +422,7 @@ export default function BookingDetailsScreen() {
                 </View>
                 <View style={styles.breakdownRow}>
                   <Text style={styles.breakdownKey}>Status</Text>
-                  <Text style={styles.breakdownValue}>{getStatusLabel(booking.status || booking.booking_status)}</Text>
+                  <Text style={styles.breakdownValue}>{trackingLabel}</Text>
                 </View>
               </View>
 
@@ -383,12 +434,12 @@ export default function BookingDetailsScreen() {
                 </View>
                 <View style={[styles.breakdownRow, { borderBottomWidth: 0, paddingBottom: 0 }]}>
                   <Text style={styles.breakdownKey}>Cancellation Fee</Text>
-                  <Text style={styles.breakdownValue}>₹{booking.cancellation_fee || 0}</Text>
+                  <Text style={styles.breakdownValue}>₹{cancellationDetails?.fee ?? booking.cancellation_fee ?? 0}</Text>
                 </View>
                 <View style={styles.breakdownDivider} />
                 <View style={[styles.breakdownRow, { paddingTop: 12 }]}>
                   <Text style={styles.breakdownKeyBold}>Refund Amount</Text>
-                  <Text style={styles.breakdownValueBold}>₹{Math.max((booking.refund_amount || (booking.amount || 0) - (booking.cancellation_fee || 0)), 0)}</Text>
+                  <Text style={styles.breakdownValueBold}>₹{Math.max(cancellationDetails?.refund ?? ((booking.amount || 0) - (booking.cancellation_fee || 0)), 0)}</Text>
                 </View>
               </View>
 

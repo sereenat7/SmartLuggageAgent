@@ -115,6 +115,73 @@ const initializeDatabase = (callback) => {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )`,
 
+    // 4d. Create Reviews Table for user feedback
+    `CREATE TABLE IF NOT EXISTS reviews (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_name VARCHAR(100) NOT NULL,
+      user_phone VARCHAR(20),
+      category VARCHAR(80),
+      rating TINYINT NOT NULL,
+      message TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
+    // 4e. Create Complaints Table for report-a-problem submissions
+    `CREATE TABLE IF NOT EXISTS complaints (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_name VARCHAR(100) NOT NULL,
+      user_email VARCHAR(150),
+      user_phone VARCHAR(20),
+      issue_type VARCHAR(80) NOT NULL,
+      custom_issue_type VARCHAR(120),
+      message TEXT NOT NULL,
+      priority VARCHAR(20) DEFAULT 'Medium',
+      status VARCHAR(30) DEFAULT 'Open',
+      admin_reply TEXT,
+      replied_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
+    // 4f. Mailbox messages synced from support Gmail
+    `CREATE TABLE IF NOT EXISTS mailbox_messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      external_id VARCHAR(255) NOT NULL UNIQUE,
+      folder VARCHAR(20) DEFAULT 'inbox',
+      direction VARCHAR(10) DEFAULT 'inbound',
+      from_name VARCHAR(150),
+      from_email VARCHAR(150),
+      to_email VARCHAR(150),
+      subject VARCHAR(500),
+      body_text LONGTEXT,
+      body_html LONGTEXT,
+      preview VARCHAR(500),
+      is_read TINYINT DEFAULT 0,
+      in_reply_to VARCHAR(255),
+      admin_reply TEXT,
+      replied_at TIMESTAMP NULL,
+      received_at TIMESTAMP NULL,
+      sent_at TIMESTAMP NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
+    // 4g. Mailbox attachments (images/documents)
+    `CREATE TABLE IF NOT EXISTS mailbox_attachments (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      message_id INT NOT NULL,
+      filename VARCHAR(255),
+      mime_type VARCHAR(120),
+      size_bytes INT DEFAULT 0,
+      content_base64 LONGTEXT,
+      is_inline TINYINT DEFAULT 0,
+      content_id VARCHAR(255),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+
+    // 4h. Mailbox reply tracking on existing tables
+    `ALTER TABLE mailbox_messages ADD admin_reply TEXT`,
+    `ALTER TABLE mailbox_messages ADD replied_at TIMESTAMP NULL`,
+    `ALTER TABLE mailbox_messages ADD imap_uid INT NULL`,
+
     // 5. Add missing columns to bookings table
     `ALTER TABLE bookings ADD arrival_city VARCHAR(100)`,
     `ALTER TABLE bookings ADD arrival_airport VARCHAR(255)`,
@@ -136,6 +203,20 @@ const initializeDatabase = (callback) => {
     `ALTER TABLE bookings ADD agent_eta_minutes INT`,
     `ALTER TABLE bookings ADD agent_leave_by_at DATETIME`,
     `ALTER TABLE bookings ADD pickup_h3_index VARCHAR(64)`,
+
+    // Tracking lifecycle timestamps
+    `ALTER TABLE bookings ADD assigned_at TIMESTAMP NULL`,
+    `ALTER TABLE bookings ADD pickup_started_at TIMESTAMP NULL`,
+    `ALTER TABLE bookings ADD pickup_completed_at TIMESTAMP NULL`,
+    `ALTER TABLE bookings ADD delivered_at TIMESTAMP NULL`,
+
+    // Cancellation fields
+    `ALTER TABLE bookings ADD cancellation_fee DECIMAL(10, 2) NULL`,
+    `ALTER TABLE bookings ADD refund_amount DECIMAL(10, 2) NULL`,
+    `ALTER TABLE bookings ADD cancellation_distance DECIMAL(10, 2) NULL`,
+    `ALTER TABLE bookings ADD cancelled_at TIMESTAMP NULL`,
+    `ALTER TABLE bookings ADD cancelled_by VARCHAR(50) NULL`,
+    `ALTER TABLE bookings ADD cancellation_reason TEXT NULL`,
     
     // Add missing columns to support_agents
     `ALTER TABLE support_agents ADD last_assigned_at TIMESTAMP NULL`,
@@ -190,6 +271,10 @@ const initializeDatabase = (callback) => {
         if (query.includes('CREATE TABLE bookings')) console.log("✅ Bookings table created");
         if (query.includes('CREATE TABLE booking_locations')) console.log("✅ Booking Locations table created");
         if (query.includes('CREATE TABLE luggage_photos')) console.log("✅ Luggage Photos table created");
+        if (query.includes('CREATE TABLE reviews')) console.log("✅ Reviews table created");
+        if (query.includes('CREATE TABLE complaints')) console.log("✅ Complaints table created");
+        if (query.includes('CREATE TABLE mailbox_messages')) console.log("✅ Mailbox messages table created");
+        if (query.includes('CREATE TABLE mailbox_attachments')) console.log("✅ Mailbox attachments table created");
         if (query.includes('DROP TABLE')) console.log(`✅ Cleaned up old tables`);
       }
       executeNextQuery();

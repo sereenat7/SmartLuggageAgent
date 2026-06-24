@@ -3,6 +3,11 @@ const { latLngToCell, gridDistance } = require("h3-js");
 const router = express.Router();
 const db = require("../db");
 const { computeAgentSchedule } = require("../utils/agentSchedule");
+const {
+  BOOKING_STATUS,
+  resolveCanonicalStatus,
+  advanceBookingStatus,
+} = require("../utils/bookingStatus");
 
 const H3_RESOLUTION = 8;
 const AGENT_STALE_MINUTES = 15;
@@ -68,14 +73,7 @@ const formatDate = (date) => {
 };
 
 // Helper function to normalize booking status for client apps
-const getBookingStatus = (status) => {
-  if (!status) return 'pending';
-  const s = String(status).toLowerCase().trim();
-  if (s === 'picked_up' || s === 'picked') return 'picked';
-  if (s === 'in-progress' || s === 'assigned') return 'assigned';
-  if (s === 'in_transit' || s === 'in transit') return 'in transit';
-  return s;
-};
+const getBookingStatus = (status) => resolveCanonicalStatus(status);
 
 // Helper function to format times as HH:MM:SS
 const formatTime = (time) => {
@@ -123,14 +121,45 @@ const formatTime = (time) => {
 };
 
 const TRACKING_STATUSES = {
-  pending: 'pending',
-  agent_assigned: 'agent_assigned',
-  in_progress: 'in_progress',
-  on_the_way: 'on_the_way',
-  completed: 'completed',
+  confirmed: BOOKING_STATUS.CONFIRMED,
+  pending: BOOKING_STATUS.CONFIRMED,
+  agent_assigned: BOOKING_STATUS.AGENT_ASSIGNED,
+  in_progress: BOOKING_STATUS.IN_PROGRESS,
+  on_the_way: BOOKING_STATUS.ON_THE_WAY,
+  completed: BOOKING_STATUS.COMPLETED,
 };
 
-const normalizeTrackingValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_');
+const normalizeTrackingValue = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
+
+const normalizeBookingStatus = (value) => resolveCanonicalStatus(value);
+
+const respondWithAdvancedBooking = async (res, bookingId, targetStatus, extraSets, prefix, logLabel) => {
+  try {
+    const result = await advanceBookingStatus(db, bookingId, targetStatus, extraSets);
+    const booking = attachTrackingQr(result.booking);
+    console.log(`${prefix} ${logLabel}:`, {
+      bookingId,
+      status: booking.status,
+      advanced: result.advanced,
+      idempotent: result.idempotent,
+    });
+    return res.json({ success: true, booking });
+  } catch (error) {
+    if (error.code === 'NOT_FOUND') {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+    if (error.code === 'INVALID_TRANSITION') {
+      return res.status(409).json({
+        success: false,
+        message: error.message,
+        currentStatus: error.current,
+        targetStatus: error.target,
+      });
+    }
+    console.error(`${prefix} error:`, error);
+    return res.status(500).json({ success: false, message: 'Failed to update booking status' });
+  }
+};
 
 const buildTrackingQrPayload = (booking, qrType) => {
   const bookingId = booking?.id;
@@ -163,6 +192,114 @@ const sendUpdatedBooking = (res, bookingId, prefix, logLabel) => {
     return res.json({ success: true, booking });
   });
 };
+
+const releaseAgentSessionForBooking = (bookingId, callback) => {
+  db.query(
+    `SELECT agent_id FROM agent_sessions WHERE booking_id = ? AND status = 'active' LIMIT 1`,
+    [bookingId],
+    (sessionErr, sessions) => {
+      if (sessionErr) {
+        console.warn('[SessionRelease] lookup failed:', sessionErr.message);
+        return callback?.();
+      }
+
+      db.query(
+        `UPDATE agent_sessions
+         SET status = 'completed', end_time = CURRENT_TIMESTAMP
+         WHERE booking_id = ? AND status = 'active'`,
+        [bookingId],
+        (closeErr) => {
+          if (closeErr) {
+            console.warn('[SessionRelease] close failed:', closeErr.message);
+            return callback?.();
+          }
+
+          const agentId = sessions?.[0]?.agent_id;
+          if (!agentId) return callback?.();
+
+          db.query(
+            `SELECT COUNT(*) AS cnt FROM agent_sessions WHERE agent_id = ? AND status = 'active'`,
+            [agentId],
+            (countErr, countRows) => {
+              if (countErr || !countRows?.length) return callback?.();
+              if (Number(countRows[0].cnt) > 0) return callback?.();
+
+              db.query(
+                `UPDATE support_agents SET status = 'available', current_user_id = NULL WHERE agent_id = ?`,
+                [agentId],
+                () => callback?.()
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+};
+
+const repairOrphanQueuedBookings = () =>
+  new Promise((resolve, reject) => {
+    db.query(
+      `UPDATE bookings
+       SET status = 'on_the_way', assignment_status = 'on_the_way'
+       WHERE status IN ('picked_up', 'pickup_completed', 'en_route', 'picked')
+         AND status <> 'cancelled'`,
+      (legacyPickupErr) => {
+        if (legacyPickupErr) {
+          console.warn('[InboxRepair] Legacy pickup status normalize failed:', legacyPickupErr.message);
+        }
+
+        db.query(
+          `UPDATE bookings
+           SET status = 'completed', assignment_status = 'completed'
+           WHERE status = 'delivered'
+             AND status <> 'cancelled'`,
+          (legacyDeliveredErr) => {
+            if (legacyDeliveredErr) {
+              console.warn('[InboxRepair] Legacy delivered status normalize failed:', legacyDeliveredErr.message);
+            }
+
+            db.query(
+              `UPDATE bookings
+               SET status = 'confirmed', assignment_status = 'confirmed'
+               WHERE payment_status = 'completed'
+                 AND status IN ('queued', 'pending', 'scheduled')`,
+              (normalizeErr) => {
+                if (normalizeErr) {
+                  console.warn('[InboxRepair] Legacy status normalize failed:', normalizeErr.message);
+                }
+
+                db.query(
+                  `SELECT b.id, b.phone
+                   FROM bookings b
+                   LEFT JOIN agent_queue aq ON aq.booking_id = b.id AND aq.status = 'waiting'
+                   WHERE b.status = 'confirmed'
+                     AND b.payment_status = 'completed'
+                     AND b.assignment_status = 'confirmed'
+                     AND aq.id IS NULL
+                     AND b.assigned_agent_id IS NULL
+                   ORDER BY b.created_at DESC
+                   LIMIT 20`,
+                  async (err, rows) => {
+                    if (err) return reject(err);
+                    for (const row of rows || []) {
+                      try {
+                        await queueBookingForAgentDashboard(row.id, row.phone);
+                        console.log('[InboxRepair] Re-queued orphan booking', row.id);
+                      } catch (repairErr) {
+                        console.warn('[InboxRepair] Failed for booking', row.id, repairErr?.message);
+                      }
+                    }
+                    resolve();
+                  }
+                );
+              }
+            );
+          }
+        );
+      }
+    );
+  });
 
 const isTrackingQrMatch = (booking, qrType, qrValue) => {
   const expected = buildTrackingQrPayload(booking, qrType);
@@ -425,8 +562,7 @@ const queueBookingForAgentDashboard = (bookingId, phone) =>
                    assignment_due_at = COALESCE(?, assignment_due_at),
                    agent_eta_minutes = ?,
                    agent_leave_by_at = ?,
-                   pickup_h3_index = ?,
-                   assignment_status = 'queued'
+                   pickup_h3_index = ?
                WHERE id = ?`,
               [
                 preferredAgentId,
@@ -466,7 +602,17 @@ const queueBookingForAgentDashboard = (bookingId, phone) =>
         if (queueErr) return reject(queueErr);
 
         db.query(
-          `UPDATE bookings SET status = 'queued', assignment_status = 'queued', assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP) WHERE id = ?`,
+          `UPDATE bookings
+           SET assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP),
+               status = CASE
+                 WHEN status IN ('pending', 'scheduled', 'queued') THEN 'confirmed'
+                 ELSE status
+               END,
+               assignment_status = CASE
+                 WHEN assignment_status IN ('pending', 'scheduled', 'queued') THEN 'confirmed'
+                 ELSE assignment_status
+               END
+           WHERE id = ?`,
           [bookingId],
           (bookingErr) => {
             if (bookingErr) return reject(bookingErr);
@@ -666,7 +812,13 @@ router.post("/create", verifyToken, async (req, res) => {
 
 // Get pending bookings for agents (inbox) - NO TOKEN REQUIRED
 // MUST come BEFORE /:bookingId so it matches first
-router.get("/inbox", (req, res) => {
+router.get("/inbox", async (req, res) => {
+  try {
+    await repairOrphanQueuedBookings();
+  } catch (repairErr) {
+    console.warn('[Inbox] Orphan queue repair failed:', repairErr?.message);
+  }
+
   const query = `
     SELECT aq.id as queueId, aq.status as queueStatus, b.id as bookingId, b.phone, b.username as name, 
            b.pickup_address, b.pickup_latitude, b.pickup_longitude, 
@@ -845,6 +997,60 @@ router.get("/agent-details/:bookingId", (req, res) => {
   });
 });
 
+// Agent profile for tracking (must be registered before /:bookingId)
+router.get("/agent-profile/:bookingId", verifyToken, (req, res) => {
+  const { bookingId } = req.params;
+  const phone = req.phone;
+
+  let phonesToTry = [phone];
+  if (phone && phone.startsWith('+91')) {
+    phonesToTry.push(phone.substring(3));
+  } else if (phone && phone.length === 10 && !phone.startsWith('0')) {
+    phonesToTry.push('+91' + phone);
+  }
+
+  const placeholders = phonesToTry.map(() => '?').join(' OR b.phone = ');
+  const query = `
+    SELECT b.assigned_agent_id,
+           COALESCE(a.agent_id, s.agent_id) AS agent_id,
+           COALESCE(a.name, s_agent.name) AS agent_name,
+           COALESCE(a.phone, s_agent.phone) AS agent_phone,
+           COALESCE(a.latitude, s_agent.latitude) AS agent_latitude,
+           COALESCE(a.longitude, s_agent.longitude) AS agent_longitude,
+           COALESCE(a.vehicle_type, s_agent.vehicle_type) AS agent_vehicle_type
+    FROM bookings b
+    LEFT JOIN support_agents a ON a.agent_id = b.assigned_agent_id
+    LEFT JOIN agent_sessions s ON s.booking_id = b.id AND s.status = 'active'
+    LEFT JOIN support_agents s_agent ON s_agent.agent_id = s.agent_id
+    WHERE b.id = ? AND (b.phone = ${placeholders})
+    LIMIT 1
+  `;
+
+  db.query(query, [bookingId, ...phonesToTry], (err, results) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: 'Failed to load agent profile' });
+    }
+    if (!results.length || !results[0].agent_id) {
+      return res.status(404).json({ success: false, message: 'Agent not found for this booking' });
+    }
+    const row = results[0];
+    const name = String(row.agent_name || '').trim();
+    return res.json({
+      success: true,
+      agent: {
+        agentId: row.agent_id,
+        id: row.agent_id,
+        name: name || null,
+        phone: row.agent_phone || null,
+        latitude: row.agent_latitude,
+        longitude: row.agent_longitude,
+        vehicleType: row.agent_vehicle_type,
+        vehicleNumber: row.agent_vehicle_type,
+      },
+    });
+  });
+});
+
 // Get booking - REQUIRES TOKEN
 router.get("/:bookingId", verifyToken, (req, res) => {
   const { bookingId } = req.params;
@@ -858,8 +1064,21 @@ router.get("/:bookingId", verifyToken, (req, res) => {
     phonesToTry.push('+91' + phone);
   }
 
-  const placeholders = phonesToTry.map(() => '?').join(' OR phone = ');
-  const query = `SELECT * FROM bookings WHERE id = ? AND (phone = ${placeholders})`;
+  const placeholders = phonesToTry.map(() => '?').join(' OR b.phone = ');
+  const query = `
+    SELECT b.*,
+           COALESCE(a.agent_id, s.agent_id) AS resolved_agent_id,
+           COALESCE(a.name, s_agent.name) AS agent_name,
+           COALESCE(a.phone, s_agent.phone) AS agent_phone,
+           COALESCE(a.latitude, s_agent.latitude) AS agent_latitude,
+           COALESCE(a.longitude, s_agent.longitude) AS agent_longitude,
+           COALESCE(a.vehicle_type, s_agent.vehicle_type) AS agent_vehicle_type
+    FROM bookings b
+    LEFT JOIN support_agents a ON a.agent_id = b.assigned_agent_id
+    LEFT JOIN agent_sessions s ON s.booking_id = b.id AND s.status = 'active'
+    LEFT JOIN support_agents s_agent ON s_agent.agent_id = s.agent_id
+    WHERE b.id = ? AND (b.phone = ${placeholders})
+  `;
   
   db.query(query, [bookingId, ...phonesToTry], (err, results) => {
     if (err) {
@@ -880,6 +1099,10 @@ router.get("/:bookingId", verifyToken, (req, res) => {
 
 // Get user bookings
 router.get("/", verifyToken, (req, res) => {
+  repairOrphanQueuedBookings().catch((repairErr) => {
+    console.warn('[BookingsList] Orphan queue repair failed:', repairErr?.message);
+  });
+
   let phone = req.phone;
   console.log('DEBUG: Fetching bookings for phone:', phone);
 
@@ -920,65 +1143,10 @@ router.get("/", verifyToken, (req, res) => {
   });
 });
 
-// Confirm pickup - NO TOKEN REQUIRED FOR AGENT
-router.patch("/pickup/:bookingId", (req, res) => {
-  const { bookingId } = req.params;
-  const updateBookingQuery = "UPDATE bookings SET status = 'picked_up', assignment_status = 'picked_up' WHERE id = ?";
-  db.query(updateBookingQuery, [bookingId], (err, result) => {
-    if (err) {
-      console.error("Pickup Error:", err);
-      return res.status(500).json({ success: false, message: "DB Error updating booking status", error: err });
-    }
-    
-    // Also update session status if needed
-    const updateSessionQuery = "UPDATE agent_sessions SET status = 'active' WHERE booking_id = ? AND status = 'active'";
-    db.query(updateSessionQuery, [bookingId], (sessionErr) => {
-      if (sessionErr) {
-        console.error("Session update error on pickup:", sessionErr);
-      }
-      res.json({ success: true, message: "Pickup confirmed successfully" });
-    });
-  });
-});
-
-// Mark delivered - NO TOKEN REQUIRED FOR AGENT
-router.patch("/delivered/:bookingId", (req, res) => {
-  const { bookingId } = req.params;
-  const updateBookingQuery = "UPDATE bookings SET status = 'delivered', assignment_status = 'delivered' WHERE id = ?";
-  db.query(updateBookingQuery, [bookingId], (err, result) => {
-    if (err) {
-      console.error("Delivery Error:", err);
-      return res.status(500).json({ success: false, message: "DB Error updating booking status", error: err });
-    }
-    
-    // Find agent session and free the agent
-    const findSessionQuery = "SELECT session_id, agent_id FROM agent_sessions WHERE booking_id = ? AND status = 'active' LIMIT 1";
-    db.query(findSessionQuery, [bookingId], (sessionErr, sessions) => {
-      if (sessionErr || sessions.length === 0) {
-        console.log("No active agent session found for booking:", bookingId);
-        return res.json({ success: true, message: "Delivery confirmed, but no active agent session found" });
-      }
-      
-      const { session_id, agent_id } = sessions[0];
-      const completeSessionQuery = "UPDATE agent_sessions SET status = 'completed', end_time = CURRENT_TIMESTAMP WHERE session_id = ?";
-      db.query(completeSessionQuery, [session_id], (completeErr) => {
-        if (completeErr) console.error("Complete session error:", completeErr);
-        
-        const freeAgentQuery = "UPDATE support_agents SET status = 'available', current_user_id = NULL WHERE agent_id = ?";
-        db.query(freeAgentQuery, [agent_id], (freeErr) => {
-          if (freeErr) console.error("Free agent error:", freeErr);
-          
-          res.json({ success: true, message: "Delivery completed successfully" });
-        });
-      });
-    });
-  });
-});
-
 // === SIMPLIFIED BOOKING FLOW ===
 
 // Accept booking - agent accepts a booking and gets assigned
-router.patch('/accept/:bookingId', (req, res) => {
+router.patch('/accept/:bookingId', async (req, res) => {
   const { bookingId } = req.params;
   const { agentId } = req.body;
 
@@ -986,56 +1154,63 @@ router.patch('/accept/:bookingId', (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing bookingId or agentId' });
   }
 
-  const query = `
-    UPDATE bookings 
-    SET status = 'agent_assigned', 
-        assigned_agent_id = ?,
-        assignment_status = 'agent_assigned',
-        assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP)
-    WHERE id = ?
-  `;
-
-  db.query(query, [agentId, bookingId], (err, result) => {
-    if (err) {
-      console.error('[BookingAccept] DB error:', err);
-      return res.status(500).json({ success: false, message: 'Failed to accept booking' });
-    }
-
-    if (!result.affectedRows) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
-
-    sendUpdatedBooking(res, bookingId, '[BookingAccept]', 'Booking assigned to agent');
-  });
+  return respondWithAdvancedBooking(
+    res,
+    bookingId,
+    BOOKING_STATUS.AGENT_ASSIGNED,
+    {
+      assigned_agent_id: agentId,
+      assigned_at: 'RAW:COALESCE(assigned_at, CURRENT_TIMESTAMP)',
+    },
+    '[BookingAccept]',
+    'Booking assigned to agent'
+  );
 });
 
-router.patch('/start/:bookingId', (req, res) => {
+router.patch('/start/:bookingId', async (req, res) => {
   const { bookingId } = req.params;
+  const agentId = Number(req.body?.agentId) || null;
 
   if (!bookingId) {
     return res.status(400).json({ success: false, message: 'Missing bookingId' });
   }
 
-  const query = `
-    UPDATE bookings
-    SET status = 'in_progress',
-        assignment_status = 'in_progress',
-        pickup_started_at = COALESCE(pickup_started_at, CURRENT_TIMESTAMP)
-    WHERE id = ?
-  `;
+  const extraSets = {
+    assigned_at: 'RAW:COALESCE(assigned_at, CURRENT_TIMESTAMP)',
+    pickup_started_at: 'RAW:COALESCE(pickup_started_at, CURRENT_TIMESTAMP)',
+  };
+  if (agentId) {
+    extraSets.assigned_agent_id = agentId;
+  }
 
-  db.query(query, [bookingId], (err, result) => {
-    if (err) {
-      console.error('[BookingStart] DB error:', err);
-      return res.status(500).json({ success: false, message: 'Failed to start task' });
-    }
+  await respondWithAdvancedBooking(
+    res,
+    bookingId,
+    BOOKING_STATUS.IN_PROGRESS,
+    extraSets,
+    '[BookingStart]',
+    'Booking marked in_progress'
+  );
 
-    if (!result.affectedRows) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
-
-    sendUpdatedBooking(res, bookingId, '[BookingStart]', 'Booking marked in_progress');
-  });
+  if (agentId) {
+    db.query(
+      `INSERT INTO agent_sessions (user_id, booking_id, agent_id, status, start_time)
+       SELECT b.user_id, b.id, ?, 'active', CURRENT_TIMESTAMP
+       FROM bookings b
+       WHERE b.id = ?
+         AND NOT EXISTS (
+           SELECT 1 FROM agent_sessions s
+           WHERE s.booking_id = b.id AND s.status = 'active'
+         )
+       LIMIT 1`,
+      [agentId, bookingId],
+      (sessionErr) => {
+        if (sessionErr) {
+          console.warn('[BookingStart] Session sync warning:', sessionErr.message);
+        }
+      }
+    );
+  }
 });
 
 router.post('/verify-qr/:bookingId', (req, res) => {
@@ -1062,11 +1237,11 @@ router.post('/verify-qr/:bookingId', (req, res) => {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
 
-    const currentStatus = normalizeTrackingValue(booking.status);
-    if (normalizedType === 'pickup' && currentStatus !== TRACKING_STATUSES.in_progress) {
+    const currentStatus = resolveCanonicalStatus(booking.status);
+    if (normalizedType === 'pickup' && currentStatus !== BOOKING_STATUS.IN_PROGRESS) {
       return res.status(409).json({ success: false, message: 'Pickup QR can only be verified in_progress' });
     }
-    if (normalizedType === 'delivery' && currentStatus !== TRACKING_STATUSES.on_the_way) {
+    if (normalizedType === 'delivery' && currentStatus !== BOOKING_STATUS.ON_THE_WAY) {
       return res.status(409).json({ success: false, message: 'Delivery QR can only be verified on_the_way' });
     }
 
@@ -1074,96 +1249,76 @@ router.post('/verify-qr/:bookingId', (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid QR code' });
     }
 
-    const nextStatus = normalizedType === 'pickup' ? TRACKING_STATUSES.on_the_way : TRACKING_STATUSES.completed;
-    const updateQuery = normalizedType === 'pickup'
-      ? `
-        UPDATE bookings
-        SET status = '${TRACKING_STATUSES.on_the_way}',
-            assignment_status = '${TRACKING_STATUSES.on_the_way}',
-            pickup_completed_at = COALESCE(pickup_completed_at, CURRENT_TIMESTAMP)
-        WHERE id = ?
-      `
-      : `
-        UPDATE bookings
-        SET status = '${TRACKING_STATUSES.completed}',
-            assignment_status = '${TRACKING_STATUSES.completed}',
-            delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
-        WHERE id = ?
-      `;
+    const nextStatus = normalizedType === 'pickup' ? BOOKING_STATUS.ON_THE_WAY : BOOKING_STATUS.COMPLETED;
+    const extraSets = normalizedType === 'pickup'
+      ? { pickup_completed_at: 'RAW:COALESCE(pickup_completed_at, CURRENT_TIMESTAMP)' }
+      : { delivered_at: 'RAW:COALESCE(delivered_at, CURRENT_TIMESTAMP)' };
 
-    db.query(updateQuery, [bookingId], (updateErr, result) => {
-      if (updateErr) {
+    advanceBookingStatus(db, bookingId, nextStatus, extraSets)
+      .then(() => {
+        if (normalizedType === 'delivery') {
+          releaseAgentSessionForBooking(bookingId, () => {
+            sendUpdatedBooking(res, bookingId, '[BookingQR]', `QR verified and status updated to ${nextStatus}`);
+          });
+          return;
+        }
+        sendUpdatedBooking(res, bookingId, '[BookingQR]', `QR verified and status updated to ${nextStatus}`);
+      })
+      .catch((updateErr) => {
+        if (updateErr.code === 'INVALID_TRANSITION') {
+          return res.status(409).json({ success: false, message: updateErr.message });
+        }
         console.error('[BookingQR] Update error:', updateErr);
         return res.status(500).json({ success: false, message: 'Failed to update status after QR verification' });
-      }
+      });
+  });
+});
 
-      if (!result.affectedRows) {
-        return res.status(404).json({ success: false, message: 'Booking not found' });
-      }
+// Mark booking as picked up (Pickup Confirmed → On the Way)
+router.patch('/pickup/:bookingId', async (req, res) => {
+  const { bookingId } = req.params;
 
-      sendUpdatedBooking(res, bookingId, '[BookingQR]', `QR verified and status updated to ${nextStatus}`);
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: 'Missing bookingId' });
+  }
+
+  return respondWithAdvancedBooking(
+    res,
+    bookingId,
+    BOOKING_STATUS.ON_THE_WAY,
+    {
+      pickup_completed_at: 'RAW:COALESCE(pickup_completed_at, CURRENT_TIMESTAMP)',
+    },
+    '[BookingPickup]',
+    'Booking marked on_the_way'
+  );
+});
+
+// Mark booking as delivered (Delivery completed → Completed)
+router.patch('/delivered/:bookingId', async (req, res) => {
+  const { bookingId } = req.params;
+
+  if (!bookingId) {
+    return res.status(400).json({ success: false, message: 'Missing bookingId' });
+  }
+
+  try {
+    await advanceBookingStatus(db, bookingId, BOOKING_STATUS.COMPLETED, {
+      delivered_at: 'RAW:COALESCE(delivered_at, CURRENT_TIMESTAMP)',
     });
-  });
-});
-
-// Mark booking as picked up
-router.patch('/pickup/:bookingId', (req, res) => {
-  const { bookingId } = req.params;
-
-  if (!bookingId) {
-    return res.status(400).json({ success: false, message: 'Missing bookingId' });
-  }
-
-  const query = `
-    UPDATE bookings 
-    SET status = 'picked_up',
-        assignment_status = 'picked_up',
-        pickup_completed_at = COALESCE(pickup_completed_at, CURRENT_TIMESTAMP)
-    WHERE id = ?
-  `;
-
-  db.query(query, [bookingId], (err, result) => {
-    if (err) {
-      console.error('[BookingPickup] DB error:', err);
-      return res.status(500).json({ success: false, message: 'Failed to update pickup status' });
-    }
-
-    if (!result.affectedRows) {
+    releaseAgentSessionForBooking(bookingId, () => {
+      sendUpdatedBooking(res, bookingId, '[BookingDelivered]', 'Booking marked completed');
+    });
+  } catch (error) {
+    if (error.code === 'NOT_FOUND') {
       return res.status(404).json({ success: false, message: 'Booking not found' });
     }
-
-    sendUpdatedBooking(res, bookingId, '[BookingPickup]', 'Booking marked as picked_up');
-  });
-});
-
-// Mark booking as delivered
-router.patch('/delivered/:bookingId', (req, res) => {
-  const { bookingId } = req.params;
-
-  if (!bookingId) {
-    return res.status(400).json({ success: false, message: 'Missing bookingId' });
+    if (error.code === 'INVALID_TRANSITION') {
+      return res.status(409).json({ success: false, message: error.message });
+    }
+    console.error('[BookingDelivered] error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to update delivery status' });
   }
-
-  const query = `
-    UPDATE bookings 
-    SET status = 'delivered',
-        assignment_status = 'delivered',
-        delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP)
-    WHERE id = ?
-  `;
-
-  db.query(query, [bookingId], (err, result) => {
-    if (err) {
-      console.error('[BookingDelivered] DB error:', err);
-      return res.status(500).json({ success: false, message: 'Failed to update delivery status' });
-    }
-
-    if (!result.affectedRows) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
-
-    sendUpdatedBooking(res, bookingId, '[BookingDelivered]', 'Booking marked as delivered');
-  });
 });
 
 // Cancel booking endpoint - supports different cancellation flows based on booking status
@@ -1189,13 +1344,17 @@ router.post('/cancel/:bookingId', verifyToken, (req, res) => {
     }
 
     const booking = rows[0];
-    const currentStatus = ((booking.status || booking.booking_status) || '').toLowerCase();
-    const currentAssignmentStatus = ((booking.assignment_status || '') || '').toLowerCase();
+    const currentStatus = normalizeBookingStatus(booking.status || booking.booking_status);
+    const currentAssignmentStatus = normalizeBookingStatus(booking.assignment_status);
 
-    // Block cancellation for certain statuses
+    // Block cancellation for on_the_way, completed, cancelled
     if (
-      currentStatus === 'on_the_way' || currentStatus === 'completed' || currentStatus === 'cancelled' ||
-      currentAssignmentStatus === 'on_the_way' || currentAssignmentStatus === 'completed' || currentAssignmentStatus === 'cancelled'
+      currentStatus === TRACKING_STATUSES.on_the_way ||
+      currentStatus === TRACKING_STATUSES.completed ||
+      currentStatus === 'cancelled' ||
+      currentAssignmentStatus === TRACKING_STATUSES.on_the_way ||
+      currentAssignmentStatus === TRACKING_STATUSES.completed ||
+      currentAssignmentStatus === 'cancelled'
     ) {
       return res.status(400).json({
         success: false,
@@ -1212,7 +1371,7 @@ router.post('/cancel/:bookingId', verifyToken, (req, res) => {
 
     const totalAmount = booking.amount || 0;
 
-    if (currentStatus === 'pending' || currentStatus === 'queued') {
+    if (currentStatus === TRACKING_STATUSES.confirmed || currentStatus === 'queued' || currentStatus === 'pending') {
       // Booking Confirmed - within 2 minutes of creation
       const createdAt = new Date(booking.created_at).getTime();
       const now = Date.now();
@@ -1238,7 +1397,7 @@ router.post('/cancel/:bookingId', verifyToken, (req, res) => {
         totalAmountPaid: totalAmount,
         refundAmount: refundAmount
       };
-    } else if (currentStatus === 'agent_assigned') {
+    } else if (currentStatus === TRACKING_STATUSES.agent_assigned) {
       // Agent Assigned - calculate distance travelled
       const agentId = booking.assigned_agent_id;
 
@@ -1328,7 +1487,7 @@ router.post('/cancel/:bookingId', verifyToken, (req, res) => {
         });
         return;
       }
-    } else if (currentStatus === 'in_progress') {
+    } else if (currentStatus === TRACKING_STATUSES.in_progress) {
       // Agent has reached pickup location
       cancellationFee = 150;
       refundAmount = Math.max(totalAmount - cancellationFee, 0);
@@ -1345,8 +1504,13 @@ router.post('/cancel/:bookingId', verifyToken, (req, res) => {
     }
 
     // If we reach here for 'pending', 'queued', 'in_progress', or agent_assigned with no agent data, finalize
-    if (currentStatus === 'pending' || currentStatus === 'queued' || currentStatus === 'in_progress' ||
-        (currentStatus === 'agent_assigned' && !booking.assigned_agent_id)) {
+    if (
+      currentStatus === TRACKING_STATUSES.confirmed ||
+      currentStatus === 'queued' ||
+      currentStatus === 'pending' ||
+      currentStatus === TRACKING_STATUSES.in_progress ||
+      (currentStatus === TRACKING_STATUSES.agent_assigned && !booking.assigned_agent_id)
+    ) {
       finalizeCancellation({
         distanceTravelled: cancellationDistance,
         distanceKm: cancellationDistance,

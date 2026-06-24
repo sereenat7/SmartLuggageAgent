@@ -43,7 +43,13 @@ const formatEta = (minutes) => {
   return `${Math.round(numeric)} mins`;
 };
 
-const safeLower = (value) => String(value || '').toLowerCase();
+const normalizePhoneForTel = (raw) => {
+  const phone = String(raw || '').replace(/\s+/g, '').trim();
+  if (!phone) return '';
+  if (phone.startsWith('+')) return phone;
+  if (/^\d{10}$/.test(phone)) return `+91${phone}`;
+  return phone;
+};
 
 const addCacheBust = (url) => {
   const separator = url.includes('?') ? '&' : '?';
@@ -83,6 +89,85 @@ const estimateEtaMinutes = (fromLocation, toLocation, speedKmph = 28) => {
   const distanceKm = haversineKm(fromLocation.latitude, fromLocation.longitude, toLocation.latitude, toLocation.longitude);
   if (!Number.isFinite(distanceKm) || distanceKm <= 0) return null;
   return Math.max(1, Math.round((distanceKm / speedKmph) * 60));
+};
+
+const extractRouteMeta = (routeGeoJson) => {
+  const feature = routeGeoJson?.features?.[0];
+  const coords = extractRouteCoordinates(routeGeoJson);
+  const distanceM = Number(feature?.properties?.distance);
+  const timeS = Number(feature?.properties?.time);
+  return {
+    coordinates: coords,
+    distanceKm: Number.isFinite(distanceM) ? distanceM / 1000 : null,
+    durationMinutes: Number.isFinite(timeS) ? Math.max(1, Math.round(timeS / 60)) : null,
+  };
+};
+
+const parseJsonResponse = async (response) => {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    console.warn('[Track] Non-JSON response:', text.slice(0, 160));
+    return {};
+  }
+};
+
+const fetchOsrmRoute = async (from, to) => {
+  if (!from || !to) return null;
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${from.longitude},${from.latitude};${to.longitude},${to.latitude}?overview=full&geometries=geojson`;
+    const routeRes = await fetch(url);
+    const routeData = await parseJsonResponse(routeRes);
+    const coords = routeData?.routes?.[0]?.geometry?.coordinates;
+    if (!Array.isArray(coords) || coords.length < 2) return null;
+    const distanceM = Number(routeData.routes[0].distance);
+    const durationS = Number(routeData.routes[0].duration);
+    return {
+      coordinates: coords,
+      distanceKm: Number.isFinite(distanceM) ? distanceM / 1000 : null,
+      durationMinutes: Number.isFinite(durationS) ? Math.max(1, Math.round(durationS / 60)) : null,
+    };
+  } catch (err) {
+    console.warn('[Track] OSRM route failed:', err?.message);
+    return null;
+  }
+};
+
+const fetchGeoapifyRoute = async (from, to) => {
+  if (!from || !to) return null;
+  try {
+    const routeUrl = `https://api.geoapify.com/v1/routing?waypoints=${from.longitude},${from.latitude}|${to.longitude},${to.latitude}&mode=drive&format=geojson&apiKey=${GEOAPIFY_STATIC_MAP_KEY}`;
+    const routeRes = await fetch(routeUrl);
+    const routeData = await parseJsonResponse(routeRes);
+    if (!routeData?.features?.length) return null;
+    return extractRouteMeta(routeData);
+  } catch (err) {
+    console.warn('[Track] Geoapify route failed:', err?.message);
+    return null;
+  }
+};
+
+const fetchDrivingRoute = async (from, to) => {
+  const geoapifyRoute = await fetchGeoapifyRoute(from, to);
+  if (geoapifyRoute?.coordinates?.length > 1) return geoapifyRoute;
+  return fetchOsrmRoute(from, to);
+};
+
+const buildAgentFromBooking = (booking) => {
+  const agentId = booking?.resolved_agent_id || booking?.assigned_agent_id;
+  if (!agentId) return null;
+  return {
+    agentId,
+    id: agentId,
+    name: booking.agent_name,
+    phone: booking.agent_phone,
+    latitude: booking.agent_latitude,
+    longitude: booking.agent_longitude,
+    vehicleType: booking.agent_vehicle_type,
+    vehicleNumber: booking.agent_vehicle_type,
+  };
 };
 
 const extractRouteCoordinates = (routeGeoJson) => {
@@ -283,42 +368,10 @@ const prefetchStaticMap = async (url) => {
   }
 };
 
-// Use bookingSync.getBookingStage for consistent stage calculation
+// Use bookingSync helpers for consistent stage calculation
 const getBookingStage = bookingSync.getBookingStage;
-
-// Use bookingSync.isCompletedBooking for consistent completion check
 const isCompletedBooking = bookingSync.isCompletedBooking;
-
-const buildTimeline = (booking) => {
-  const stage = getBookingStage(booking);
-  return [
-    {
-      title: 'Booking Confirmed',
-      timestamp: formatTimestamp(booking?.created_at),
-      active: stage >= 1,
-    },
-    {
-      title: 'Agent Assigned',
-      timestamp: stage >= 2 ? formatTimestamp(booking?.assigned_at) : 'Pending',
-      active: stage >= 2,
-    },
-    {
-      title: 'In Progress',
-      timestamp: stage >= 3 ? formatTimestamp(booking?.pickup_started_at) : 'Pending',
-      active: stage >= 3,
-    },
-    {
-      title: 'On the Way',
-      timestamp: stage >= 4 ? formatTimestamp(booking?.pickup_completed_at) : 'Pending',
-      active: stage >= 4,
-    },
-    {
-      title: 'Completed',
-      timestamp: stage >= 5 ? formatTimestamp(booking?.delivered_at) : 'Pending',
-      active: stage >= 5,
-    },
-  ];
-};
+const buildTimeline = bookingSync.buildTimeline;
 
 export default function TrackLuggage() {
   const params = useLocalSearchParams();
@@ -331,6 +384,7 @@ export default function TrackLuggage() {
   const [h3Status, setH3Status] = useState(null);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [routeDistanceKm, setRouteDistanceKm] = useState(null);
+  const [routeEtaMinutes, setRouteEtaMinutes] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mapImageLoading, setMapImageLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -342,12 +396,24 @@ export default function TrackLuggage() {
   const resolveTrackedBookingId = useCallback(async () => {
     if (params.bookingId) {
       const routeBookingId = String(params.bookingId);
-      await AsyncStorage.setItem('activeTrackBookingId', routeBookingId);
+      await bookingSync.setActiveTrackingBooking(routeBookingId);
       return routeBookingId;
     }
 
-    const stored = await AsyncStorage.getItem('activeTrackBookingId');
-    return stored || '';
+    const stored = await bookingSync.getActiveTrackingBooking();
+    if (stored) return stored;
+
+    const token = await AsyncStorage.getItem('authToken');
+    if (token) {
+      const activeBooking = await bookingSync.fetchLatestActiveBooking(token);
+      if (activeBooking?.id) {
+        const activeId = String(activeBooking.id);
+        await bookingSync.setActiveTrackingBooking(activeId);
+        return activeId;
+      }
+    }
+
+    return '';
   }, [params.bookingId]);
 
   // Simple direct polling - no complex callbacks
@@ -379,7 +445,7 @@ export default function TrackLuggage() {
         return;
       }
 
-      const data = await response.json();
+      const data = await parseJsonResponse(response);
       console.log('[Track] API Response:', data);
 
       if (data.success && data.booking) {
@@ -395,65 +461,103 @@ export default function TrackLuggage() {
         setBooking(currentBooking);
         setLastUpdated(new Date());
 
-        // Fetch agent profile if assigned
-        const assignedAgentId = currentBooking?.assigned_agent_id;
+        const assignedAgentId = currentBooking?.resolved_agent_id || currentBooking?.assigned_agent_id;
         const stage = getBookingStage(currentBooking);
 
-        let fetchedAgent = null;
+        let fetchedAgent = buildAgentFromBooking(currentBooking);
+
         if (assignedAgentId && stage >= 2) {
           try {
-            const agentRes = await fetch(`${API_BASE_URL}/api/agents/profile/${assignedAgentId}?_t=${Date.now()}`);
-            const agentData = await agentRes.json();
+            const agentRes = await fetch(`${API_BASE_URL}/api/bookings/agent-profile/${targetBookingId}?_t=${Date.now()}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const agentData = await parseJsonResponse(agentRes);
             if (agentData.success && agentData.agent) {
-              console.log('[Track] Agent profile fetched');
-              fetchedAgent = agentData.agent;
-              setAgentProfile(agentData.agent);
-              const nextLiveLocation = bookingSync.getLiveAgentLocation(agentData.agent) || {
-                latitude: toFiniteNumber(agentData.agent?.latitude),
-                longitude: toFiniteNumber(agentData.agent?.longitude),
+              fetchedAgent = {
+                ...(fetchedAgent || {}),
+                ...agentData.agent,
+                name: agentData.agent.name || fetchedAgent?.name,
+                phone: agentData.agent.phone || fetchedAgent?.phone,
               };
-              if (Number.isFinite(nextLiveLocation?.latitude) && Number.isFinite(nextLiveLocation?.longitude)) {
-                setLiveAgentLocation(nextLiveLocation);
-              }
             }
           } catch (err) {
             console.warn('[Track] Failed to fetch agent:', err?.message);
           }
         }
 
+        if (fetchedAgent) {
+          setAgentProfile(fetchedAgent);
+          const embeddedLocation = bookingSync.getLiveAgentLocation(fetchedAgent);
+          if (embeddedLocation) {
+            setLiveAgentLocation(embeddedLocation);
+          }
+        }
+
+        try {
+          const h3Res = await fetch(`${API_BASE_URL}/api/agents/h3-status/${targetBookingId}?_t=${Date.now()}`);
+          const h3Data = await h3Res.json();
+          if (h3Data.success) {
+            setH3Status(h3Data);
+          }
+        } catch (_h3Err) {
+          // optional
+        }
+
         const pickupLat = toFiniteNumber(currentBooking?.pickup_latitude);
         const pickupLng = toFiniteNumber(currentBooking?.pickup_longitude);
         const dropLat = toFiniteNumber(currentBooking?.drop_latitude);
         const dropLng = toFiniteNumber(currentBooking?.drop_longitude);
-        const activeTarget = stage >= 4
-          ? (pickupLat !== null && pickupLng !== null && dropLat !== null && dropLng !== null ? { latitude: dropLat, longitude: dropLng } : null)
-          : (pickupLat !== null && pickupLng !== null ? { latitude: pickupLat, longitude: pickupLng } : null);
+        const pickupPoint = pickupLat !== null && pickupLng !== null ? { latitude: pickupLat, longitude: pickupLng } : null;
+        const dropPoint = dropLat !== null && dropLng !== null ? { latitude: dropLat, longitude: dropLng } : null;
 
-        const currentAgent = bookingSync.getLiveAgentLocation(fetchedAgent || agentProfile || {}) || liveAgentLocation;
-        if (currentAgent && activeTarget) {
-          setRouteDistanceKm(null);
-          try {
-            const routeUrl = `https://api.geoapify.com/v1/routing?waypoints=${currentAgent.latitude},${currentAgent.longitude}|${activeTarget.latitude},${activeTarget.longitude}&mode=drive&format=geojson&apiKey=${GEOAPIFY_STATIC_MAP_KEY}`;
-            const routeRes = await fetch(routeUrl);
-            const routeData = await routeRes.json();
-            const coords = extractRouteCoordinates(routeData);
-            if (coords.length > 0) {
-              setRouteCoordinates(coords);
-              const firstLegKm = routeData?.features?.[0]?.properties?.distance ? Number(routeData.features[0].properties.distance) / 1000 : null;
-              setRouteDistanceKm(Number.isFinite(firstLegKm) ? firstLegKm : null);
+        const activeTarget = stage >= 4 ? dropPoint : pickupPoint;
+        const agentLocation = bookingSync.getLiveAgentLocation(fetchedAgent || {}) || liveAgentLocation;
+
+        let nextRouteCoords = [];
+        let nextDistanceKm = null;
+        let nextEtaMinutes = null;
+
+        // Full pickup → drop by-road route on map whenever both points exist
+        if (pickupPoint && dropPoint) {
+          const mapRoute = await fetchDrivingRoute(pickupPoint, dropPoint);
+          if (mapRoute?.coordinates?.length > 1) {
+            nextRouteCoords = mapRoute.coordinates;
+            if (stage >= 4) {
+              nextDistanceKm = mapRoute.distanceKm;
+              nextEtaMinutes = mapRoute.durationMinutes;
             }
-          } catch (err) {
-            console.warn('[Track] Failed to fetch live route:', err?.message);
-            const fallbackEta = estimateEtaMinutes(currentAgent, activeTarget);
-            setRouteDistanceKm(currentAgent && activeTarget ? haversineKm(currentAgent.latitude, currentAgent.longitude, activeTarget.latitude, activeTarget.longitude) : null);
-            if (fallbackEta) {
-              setH3Status((prev) => ({ ...(prev || {}), computed: { ...(prev?.computed || {}), travelEtaMinutes: fallbackEta } }));
-            }
+          } else {
+            nextRouteCoords = [
+              [pickupPoint.longitude, pickupPoint.latitude],
+              [dropPoint.longitude, dropPoint.latitude],
+            ];
           }
-        } else {
-          setRouteCoordinates([]);
-          setRouteDistanceKm(null);
         }
+
+        // Live ETA/distance from agent to current target
+        const routeOrigin = agentLocation || (stage >= 4 ? pickupPoint : null);
+        if (routeOrigin && activeTarget && agentLocation && stage >= 2 && stage < 5) {
+          const liveRoute = await fetchDrivingRoute(routeOrigin, activeTarget);
+          if (liveRoute) {
+            nextDistanceKm = liveRoute.distanceKm ?? nextDistanceKm;
+            nextEtaMinutes = liveRoute.durationMinutes ?? nextEtaMinutes;
+            if (stage < 4 && liveRoute.coordinates?.length > 1) {
+              nextRouteCoords = liveRoute.coordinates;
+            }
+          } else if (routeOrigin && activeTarget) {
+            nextDistanceKm = nextDistanceKm ?? haversineKm(
+              routeOrigin.latitude,
+              routeOrigin.longitude,
+              activeTarget.latitude,
+              activeTarget.longitude,
+            );
+            nextEtaMinutes = nextEtaMinutes ?? estimateEtaMinutes(routeOrigin, activeTarget);
+          }
+        }
+
+        setRouteCoordinates(nextRouteCoords);
+        setRouteDistanceKm(nextDistanceKm);
+        setRouteEtaMinutes(nextEtaMinutes);
       } else {
         console.warn('[Track] API returned success=false');
       }
@@ -574,41 +678,52 @@ export default function TrackLuggage() {
   isCompleted.current = completed;
   const timeline = useMemo(() => buildTimeline(trackingBooking), [trackingBooking]);
   const stage = getBookingStage(trackingBooking);
-  const assignedAgentId = booking?.assigned_agent_id || booking?.assignedAgentId || h3Status?.stored?.assignedAgentId || assignment?.session?.agent?.agentId || null;
+  const assignedAgentId = booking?.resolved_agent_id || booking?.assigned_agent_id || booking?.assignedAgentId || h3Status?.stored?.assignedAgentId || assignment?.session?.agent?.agentId || null;
   const assignedAgent = agentProfile || assignment?.session?.agent || null;
-  const activeTarget = stage >= 4
-    ? {
-        latitude: toFiniteNumber(trackingBooking?.drop_latitude || trackingBooking?.dropLatitude),
-        longitude: toFiniteNumber(trackingBooking?.drop_longitude || trackingBooking?.dropLongitude),
-        label: 'Airport',
-      }
-    : {
-        latitude: toFiniteNumber(trackingBooking?.pickup_latitude || trackingBooking?.pickupLatitude),
-        longitude: toFiniteNumber(trackingBooking?.pickup_longitude || trackingBooking?.pickupLongitude),
-        label: 'You',
-      };
-  const liveEtaMinutes = estimateEtaMinutes(liveAgentLocation, activeTarget);
-  const liveDistanceText = routeDistanceKm !== null
-    ? `${routeDistanceKm.toFixed(1)} km away`
-    : liveAgentLocation && activeTarget
-      ? `${haversineKm(liveAgentLocation.latitude, liveAgentLocation.longitude, activeTarget.latitude, activeTarget.longitude).toFixed(1)} km away`
-      : '--';
-  const mapPhaseText = stage >= 4 ? 'Agent to airport' : stage >= 2 ? 'Agent to you' : 'Map available after driver assignment';
-
-  // Fix 4: Driver details only when stage >= 2 (agent assigned)
-  const driverName = stage >= 2
-    ? (assignedAgent?.name || (assignedAgentId ? `Agent #${assignedAgentId}` : 'Driver details loading...'))
-    : 'No driver assigned';
-  const driverPhone = stage >= 2 ? (assignedAgent?.phone || assignment?.session?.agent?.phone || '') : '';
-  const vehicleNumber = stage >= 2
-    ? (assignedAgent?.vehicleNumber || assignedAgent?.vehicleType || trackingBooking?.vehicle_number || trackingBooking?.vehicle_type || 'Vehicle pending')
-    : 'Waiting for agent acceptance';
-  const driverStatus = stage >= 5 ? 'Completed' : stage >= 4 ? 'On The Way' : stage >= 3 ? 'In Progress' : stage >= 2 ? 'Agent Assigned' : stage >= 1 ? 'Pending' : 'No booking';
-  const etaText = formatEta(liveEtaMinutes || h3Status?.computed?.travelEtaMinutes || trackingBooking?.agent_eta_minutes || trackingBooking?.eta_minutes);
   const pickupLatitude = toFiniteNumber(trackingBooking?.pickup_latitude || trackingBooking?.pickupLatitude);
   const pickupLongitude = toFiniteNumber(trackingBooking?.pickup_longitude || trackingBooking?.pickupLongitude);
   const dropLatitude = toFiniteNumber(trackingBooking?.drop_latitude || trackingBooking?.dropLatitude);
   const dropLongitude = toFiniteNumber(trackingBooking?.drop_longitude || trackingBooking?.dropLongitude);
+  const activeTarget = stage >= 4
+    ? {
+        latitude: dropLatitude,
+        longitude: dropLongitude,
+        label: 'Airport',
+      }
+    : {
+        latitude: pickupLatitude,
+        longitude: pickupLongitude,
+        label: 'You',
+      };
+  const liveDistanceText = routeDistanceKm !== null
+    ? `${routeDistanceKm.toFixed(1)} km away`
+    : h3Status?.computed?.distanceKm != null
+      ? `${Number(h3Status.computed.distanceKm).toFixed(1)} km away`
+      : liveAgentLocation && activeTarget
+        ? `${haversineKm(liveAgentLocation.latitude, liveAgentLocation.longitude, activeTarget.latitude, activeTarget.longitude).toFixed(1)} km away`
+        : pickupLatitude !== null && dropLatitude !== null
+          ? `${haversineKm(pickupLatitude, pickupLongitude, dropLatitude, dropLongitude).toFixed(1)} km away`
+          : '--';
+  const mapPhaseText = stage >= 4 ? 'Agent to airport' : stage >= 2 ? 'Agent to you' : 'Map available after driver assignment';
+
+  // Fix 4: Driver details only when stage >= 2 (agent assigned)
+  const driverName = stage >= 2
+    ? (
+      String(assignedAgent?.name || trackingBooking?.agent_name || '').trim() ||
+      (assignedAgentId ? `Agent #${assignedAgentId}` : 'Driver details loading...')
+    )
+    : 'No driver assigned';
+  const driverPhone = stage >= 2 ? (assignedAgent?.phone || trackingBooking?.agent_phone || assignment?.session?.agent?.phone || '') : '';
+  const vehicleNumber = stage >= 2
+    ? (assignedAgent?.vehicleNumber || assignedAgent?.vehicleType || trackingBooking?.agent_vehicle_type || trackingBooking?.vehicle_number || trackingBooking?.vehicle_type || 'Vehicle pending')
+    : 'Waiting for agent acceptance';
+  const driverStatus = stage >= 5 ? 'Completed' : stage >= 4 ? 'On The Way' : stage >= 3 ? 'In Progress' : stage >= 2 ? 'Agent Assigned' : stage >= 1 ? 'Pending' : 'No booking';
+  const etaText = formatEta(
+    routeEtaMinutes ||
+    h3Status?.computed?.travelEtaMinutes ||
+    trackingBooking?.agent_eta_minutes ||
+    trackingBooking?.eta_minutes
+  );
   const hasPickupPoint = pickupLatitude !== null && pickupLongitude !== null;
   const hasDropPoint = dropLatitude !== null && dropLongitude !== null;
   const centerLatitude = hasPickupPoint && hasDropPoint
@@ -711,7 +826,9 @@ export default function TrackLuggage() {
         }
 
         // Project route geometry cleanly
-        const routePoints = Array.isArray(routeCoords) ? routeCoords.map(pt => [pt[1], pt[0]]) : [];
+        const routePoints = Array.isArray(routeCoords)
+          ? routeCoords.map((pt) => (Array.isArray(pt) && pt.length >= 2 ? [pt[1], pt[0]] : null)).filter(Boolean)
+          : [];
         if (routePoints.length > 1) {
           const poly = L.polyline(routePoints, { 
             color: '#2563eb', 
@@ -720,6 +837,15 @@ export default function TrackLuggage() {
             lineJoin: 'round'
           }).addTo(map);
           map.fitBounds(poly.getBounds(), { padding: [40, 40], animate: false });
+        } else if (pickup && drop) {
+          const fallbackLine = L.polyline([[pickup[0], pickup[1]], [drop[0], drop[1]]], {
+            color: '#2563eb',
+            weight: 5,
+            opacity: 0.85,
+            dashArray: '8 8',
+            lineJoin: 'round'
+          }).addTo(map);
+          map.fitBounds(fallbackLine.getBounds(), { padding: [40, 40], animate: false });
         } else if (markers.length) {
           const group = L.featureGroup(markers);
           map.fitBounds(group.getBounds(), { padding: [40, 40], animate: false });
@@ -758,8 +884,9 @@ export default function TrackLuggage() {
       : 'No active booking yet';
 
   const handleCallDriver = useCallback(() => {
-    if (!driverPhone) return;
-    Linking.openURL(`tel:${driverPhone}`);
+    const phone = normalizePhoneForTel(driverPhone);
+    if (!phone) return;
+    Linking.openURL(`tel:${phone}`);
   }, [driverPhone]);
 
   // Fix 1 & 5: Show empty state or completed state
@@ -826,6 +953,7 @@ export default function TrackLuggage() {
         <View style={styles.mapCardFrame}>
           {stage >= 2 && (hasPickupPoint || hasDropPoint) ? (
             <WebView
+              key={`map-${bookingId}-${routeCoordinates.length}-${pickupLatitude}-${dropLatitude}-${liveAgentLocation?.latitude || 'na'}`}
               originWhitelist={['*']}
               mixedContentMode="always"
               source={{

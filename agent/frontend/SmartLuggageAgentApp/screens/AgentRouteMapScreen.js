@@ -16,6 +16,7 @@ import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BrandGradient, BRAND_ORANGE } from '../constants/colors';
 import { USER_API_URL } from '../config';
+import { startBookingTask } from '../utils/trackingService';
 import AgentMapView from '../components/AgentMapView';
 import { normalizeLatLng } from '../utils/locationUtils';
 
@@ -303,19 +304,13 @@ export default function AgentRouteMapScreen({ navigation, route }) {
 
   const handleArrived = async () => {
     try {
-      const resp = await fetch(`${USER_API_URL}/api/agents/arrived`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId: request?.sessionId || null,
-          bookingId: bookingIdFromParams,
-          agentId: request?.agentId || null,
-        }),
-      });
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        throw new Error(data.message || `Update failed (${resp.status})`);
+      if (!bookingIdFromParams) {
+        throw new Error('Missing booking ID');
       }
+      await startBookingTask(
+        bookingIdFromParams,
+        request?.agentId || request?.preferredAgentId || customerFromServer?.agentId || null,
+      );
       navigation.reset({
         index: 0,
         routes: [{
@@ -331,7 +326,7 @@ export default function AgentRouteMapScreen({ navigation, route }) {
         }],
       });
     } catch (e) {
-      Alert.alert('Arrived', e?.message || 'Failed to mark arrival.');
+      Alert.alert('Start Task', e?.message || 'Failed to start task.');
     }
   };
 

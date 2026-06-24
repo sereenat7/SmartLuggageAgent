@@ -1,13 +1,15 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, 
-  SafeAreaView, StatusBar, Platform 
+  SafeAreaView, StatusBar, Platform, Linking, Alert 
 } from 'react-native';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import * as bookingSync from '../../utils/bookingSync';
+import { API_BASE_URL } from '../../utils/api';
 
 export default function Home() {
   const router = useRouter();
@@ -20,48 +22,65 @@ export default function Home() {
   const [activeBooking, setActiveBooking] = useState(null);
   const [recentBookings, setRecentBookings] = useState([]);
   const [userPhone, setUserPhone] = useState("");
+  const pollingRef = useRef(null);
 
   const displayInitial = displayName.charAt(0).toUpperCase();
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/bookings`;
+  const API_URL = `${API_BASE_URL}/api/bookings`;
 
-  // Fetch latest booking
-  const fetchLatestBooking = async () => {
+  const applyBookingsSnapshot = useCallback((snapshot) => {
+    if (!snapshot) return;
+    setRecentBookings(snapshot.recentBookings || []);
+    setActiveBooking((previous) => {
+      const next = snapshot.activeBooking || null;
+      if (!next) return null;
+      if (!previous || bookingSync.hasBookingStatusChanged(previous, next)) {
+        return next;
+      }
+      return { ...previous, ...next };
+    });
+
+    if (snapshot.activeBooking?.id) {
+      bookingSync.setActiveTrackingBooking(snapshot.activeBooking.id);
+    } else {
+      bookingSync.setActiveTrackingBooking(null);
+    }
+  }, []);
+
+  const refreshHomeBookings = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('authToken');
-      if (!token) return;
+      if (!token) return null;
 
-      const response = await fetch(API_URL, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const bookings = await bookingSync.fetchUserBookings(token);
+      if (!bookings) return null;
 
-      const data = await response.json();
-      if (data.success && data.bookings && data.bookings.length > 0) {
-        const latest = data.bookings[0];
-        setActiveBooking(latest);
-      }
+      const preferredId = await bookingSync.getActiveTrackingBooking();
+      const activeBooking = bookingSync.resolvePrimaryActiveBooking(bookings, preferredId);
+      const snapshot = {
+        bookings,
+        activeBooking,
+        recentBookings: bookings.slice(0, 3),
+      };
+
+      applyBookingsSnapshot(snapshot);
+      return { ...snapshot, token };
     } catch (error) {
-      console.error("Error fetching active booking:", error);
+      console.error('Error refreshing home bookings:', error);
+      return null;
     }
-  };
+  }, [applyBookingsSnapshot]);
 
-  // Fetch recent bookings
-  const fetchRecentBookings = async () => {
-    try {
-      const token = await AsyncStorage.getItem('authToken');
-      if (!token) return;
+  const handleBookingsSnapshot = useCallback((snapshot) => {
+    applyBookingsSnapshot(snapshot);
 
-      const response = await fetch(API_URL, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      const data = await response.json();
-      if (data.success && data.bookings) {
-        setRecentBookings(data.bookings.slice(0, 3));
+    if (snapshot?.activeBooking && !bookingSync.isActiveBooking(snapshot.activeBooking)) {
+      if (pollingRef.current) {
+        bookingSync.stopBookingPolling(pollingRef.current);
+        pollingRef.current = null;
       }
-    } catch (error) {
-      console.error("Error fetching recent bookings:", error);
+      refreshHomeBookings();
     }
-  };
+  }, [applyBookingsSnapshot, refreshHomeBookings]);
 
   // Load saved pickup or current location
   const loadPickup = async () => {
@@ -150,51 +169,113 @@ export default function Home() {
 
     loadName();
     loadPickup();
-    fetchLatestBooking();
-    fetchRecentBookings();
-  }, [params?.userName]);
+    refreshHomeBookings();
+  }, [params?.userName, refreshHomeBookings]);
 
   useFocusEffect(
-  useCallback(() => {
-    // When focusing on homepage, load name and location from AsyncStorage
-    const loadDataOnFocus = async () => {
-      try {
-        // Load name
-        const savedName = await AsyncStorage.getItem("userName");
-        if (savedName) {
-          setDisplayName(savedName);
-        }
-        
-        // Load pickup location
-        const saved = await AsyncStorage.getItem("pickupDetails");
-        if (saved) {
-          const data = JSON.parse(saved);
-          if (data.address) {
-            setPickupAddress(data.address);
-            setUserSelectedPickup(data.userSelected || false);
-            return;
+    useCallback(() => {
+      let isActive = true;
+
+      const loadDataOnFocus = async () => {
+        try {
+          const savedName = await AsyncStorage.getItem('userName');
+          if (savedName && isActive) {
+            setDisplayName(savedName);
           }
+
+          const saved = await AsyncStorage.getItem('pickupDetails');
+          if (saved) {
+            const data = JSON.parse(saved);
+            if (data.address && isActive) {
+              setPickupAddress(data.address);
+              setUserSelectedPickup(data.userSelected || false);
+            }
+          } else if (isActive) {
+            await loadPickup();
+          }
+
+          if (!isActive) return;
+
+          const result = await refreshHomeBookings();
+          if (!isActive || !result?.token) return;
+
+          if (pollingRef.current) {
+            bookingSync.stopBookingPolling(pollingRef.current);
+          }
+
+          pollingRef.current = bookingSync.startBookingsListPolling(
+            result.token,
+            (snapshot) => {
+              if (!isActive) return;
+              handleBookingsSnapshot(snapshot);
+            },
+            3000
+          );
+        } catch (e) {
+          console.log('Error in useFocusEffect:', e);
         }
-        
-        // Only fetch if NO location saved at all
-        await loadPickup();
-        
-        // Fetch bookings on focus
-        await fetchLatestBooking();
-        await fetchRecentBookings();
-      } catch (e) {
-        console.log("Error in useFocusEffect:", e);
-      }
-    };
-    
-    loadDataOnFocus();
-  }, [])
-);
+      };
+
+      loadDataOnFocus();
+
+      return () => {
+        isActive = false;
+        if (pollingRef.current) {
+          bookingSync.stopBookingPolling(pollingRef.current);
+          pollingRef.current = null;
+        }
+      };
+    }, [refreshHomeBookings, handleBookingsSnapshot])
+  );
   // When user manually selects a pickup
   const onUserSelectPickup = async (address) => {
     setPickupAddress(address);
     setUserSelectedPickup(true);
     await AsyncStorage.setItem("pickupDetails", JSON.stringify({ userSelected: true, address }));
+  };
+
+  // Format airport with terminal dynamically
+  const navigateToBookingDetails = (booking) => {
+    if (!booking?.id) return;
+    router.push({
+      pathname: '/(booking)/booking-details',
+      params: { bookingId: String(booking.id) },
+    });
+  };
+
+  const formatAirportDestination = (booking) => {
+    if (!booking) return 'Airport';
+    
+    // Use arrival_airport from database (fully dynamic)
+    const airport = booking.arrival_airport || booking.departure_city || 'Airport';
+    const terminal = booking.terminal ? ` ${booking.terminal}` : '';
+    
+    return `${airport}${terminal}`;
+  };
+
+  const getBookingProgressInfo = (booking) => {
+    if (!booking) return { percentage: 0, label: 'Pending', description: 'Awaiting confirmation' };
+
+    if (bookingSync.isCancelledBooking(booking)) {
+      return { percentage: 0, label: 'Cancelled', description: 'Booking cancelled' };
+    }
+    
+    const stage = bookingSync.getBookingStage(booking);
+    
+    switch(stage) {
+      case 1:
+        return { percentage: 20, label: 'Booking Confirmed', description: 'Getting ready...' };
+      case 2:
+        return { percentage: 40, label: 'Agent Assigned', description: 'Agent confirmed' };
+      case 3:
+        return { percentage: 60, label: 'In Progress', description: 'Pickup in progress...' };
+      case 4:
+        return { percentage: 80, label: 'On the Way', description: 'Arriving soon...' };
+      case 5:
+        return { percentage: 100, label: 'Delivered', description: 'Completed' };
+      default:
+        return { percentage: 0, label: 'Pending', description: 'Awaiting confirmation' };
+    }
   };
 
   // Format date for display
@@ -209,21 +290,40 @@ export default function Home() {
     }
   };
 
-  // Format airport with terminal dynamically
-  const formatAirportDestination = (booking) => {
-    if (!booking) return 'Airport';
-    
-    // Use arrival_airport from database (fully dynamic)
-    const airport = booking.arrival_airport || booking.departure_city || 'Airport';
-    const terminal = booking.terminal ? ` ${booking.terminal}` : '';
-    
-    return `${airport}${terminal}`;
+  const SUPPORT_EMAIL = 'smartluggage.support@gmail.com';
+  const SUPPORT_PHONE = '1800 123 456';
+  const SUPPORT_PHONE_DIAL = '1800123456';
+
+  const openSupportEmail = async () => {
+    const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Smart Luggage Support Query')}`;
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Email', `Please email us at ${SUPPORT_EMAIL}`);
+      }
+    } catch (error) {
+      console.error('Failed to open email client:', error);
+    }
+  };
+
+  const openSupportCall = async () => {
+    const url = `tel:${SUPPORT_PHONE_DIAL}`;
+    try {
+      const canOpen = await Linking.canOpenURL(url);
+      if (canOpen) {
+        await Linking.openURL(url);
+      }
+    } catch (error) {
+      console.error('Failed to open phone dialer:', error);
+    }
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <ScrollView showsVerticalScrollIndicator={false} bounces={true}>
+      <ScrollView showsVerticalScrollIndicator={false} bounces={true} contentContainerStyle={styles.scrollContent}>
         {/* TOP HEADER */}
         <LinearGradient colors={['#ff0033', '#ff6600']} style={styles.headerGradient}>
           <SafeAreaView style={{ flex: 1 }}>
@@ -313,7 +413,11 @@ export default function Home() {
           </View>
 
           {activeBooking ? (
-            <View style={styles.activeCard}>
+            <TouchableOpacity
+              style={styles.activeCard}
+              activeOpacity={0.9}
+              onPress={() => navigateToBookingDetails(activeBooking)}
+            >
               <View style={styles.cardTop}>
                 <View style={styles.clockIconBg}>
                   <Feather name="clock" size={24} color="#FFF" />
@@ -338,24 +442,24 @@ export default function Home() {
                   </View>
                 </View>
 
-                <View style={[styles.statusBadge, { backgroundColor: activeBooking.booking_status === 'assigned' ? '#FFF3CD' : activeBooking.booking_status === 'in transit' ? '#D1ECF1' : '#D4EDDA' }]}>
-                  <Text style={[styles.statusText, { color: activeBooking.booking_status === 'assigned' ? '#856404' : activeBooking.booking_status === 'in transit' ? '#0C5460' : '#155724' }]}>
-                    {activeBooking.booking_status ? activeBooking.booking_status.charAt(0).toUpperCase() + activeBooking.booking_status.slice(1) : 'Assigned'}
+                <View style={[styles.statusBadge, { backgroundColor: getBookingProgressInfo(activeBooking).percentage <= 25 ? '#FFF3CD' : getBookingProgressInfo(activeBooking).percentage <= 50 ? '#E7F3FF' : getBookingProgressInfo(activeBooking).percentage < 100 ? '#D1ECF1' : '#D4EDDA' }]}>
+                  <Text style={[styles.statusText, { color: getBookingProgressInfo(activeBooking).percentage <= 25 ? '#856404' : getBookingProgressInfo(activeBooking).percentage <= 50 ? '#004085' : getBookingProgressInfo(activeBooking).percentage < 100 ? '#0C5460' : '#155724' }]}>
+                    {getBookingProgressInfo(activeBooking).label}
                   </Text>
                 </View>
               </View>
 
               <View style={styles.progressContainer}>
                 <View style={styles.progressBarBg}>
-                  <View style={[styles.progressBarFill, { width: activeBooking.booking_status === 'assigned' ? '25%' : activeBooking.booking_status === 'in transit' ? '65%' : '100%' }]} />
+                  <View style={[styles.progressBarFill, { width: `${getBookingProgressInfo(activeBooking).percentage}%` }]} />
                 </View>
 
                 <View style={styles.progressLabels}>
-                  <Text style={styles.arrivalText}>{activeBooking.booking_status === 'assigned' ? 'Getting ready...' : activeBooking.booking_status === 'in transit' ? 'Arriving soon...' : 'Completed'}</Text>
-                  <Text style={styles.percentText}>{activeBooking.booking_status === 'assigned' ? '25%' : activeBooking.booking_status === 'in transit' ? '65%' : '100%'}</Text>
+                  <Text style={styles.arrivalText}>{getBookingProgressInfo(activeBooking).description}</Text>
+                  <Text style={styles.percentText}>{getBookingProgressInfo(activeBooking).percentage}%</Text>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           ) : (
             <View style={styles.activeCard}>
               <View style={styles.cardTop}>
@@ -386,11 +490,19 @@ export default function Home() {
             {recentBookings && recentBookings.length > 0 ? (
               recentBookings.map((booking, index) => (
                 <View key={booking.id || index}>
-                  <RecentItem 
-                    id={`#${booking.id}`} 
-                    date={formatDate(booking.created_at)}
-                    status={booking.booking_status ? booking.booking_status.charAt(0).toUpperCase() + booking.booking_status.slice(1) : 'Completed'}
-                  />
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    onPress={() => router.push({
+                      pathname: '/(booking)/booking-details',
+                      params: { bookingId: String(booking.id) },
+                    })}
+                  >
+                    <RecentItem 
+                      id={`#${booking.id}`} 
+                      date={formatDate(booking.created_at)}
+                      status={getBookingProgressInfo(booking).label}
+                    />
+                  </TouchableOpacity>
                   {index < recentBookings.length - 1 && <View style={styles.divider} />}
                 </View>
               ))
@@ -404,7 +516,50 @@ export default function Home() {
             )}
           </View>
 
-          <View style={{ height: 100 }} />
+          {/* SUPPORT */}
+          <View style={styles.supportCard}>
+            <View style={styles.supportHeader}>
+              <View style={styles.supportIconBox}>
+                <Ionicons name="help-circle-outline" size={22} color="#ff6600" />
+              </View>
+              <View style={styles.supportHeaderText}>
+                <Text style={styles.supportTitle}>Need help?</Text>
+                <Text style={styles.supportSubtitle}>We usually reply within a few minutes.</Text>
+              </View>
+            </View>
+
+            <View style={styles.supportActionsRow}>
+              <TouchableOpacity
+                style={styles.supportActionCard}
+                activeOpacity={0.8}
+                onPress={openSupportEmail}
+              >
+                <View style={styles.supportActionIconEmail}>
+                  <Ionicons name="mail-outline" size={20} color="#ff6600" />
+                </View>
+                <View style={styles.supportActionTextWrap}>
+                  <Text style={styles.supportActionLabel}>Email</Text>
+                  <Text style={styles.supportActionValue} numberOfLines={1}>
+                    {SUPPORT_EMAIL}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.supportActionCard}
+                activeOpacity={0.8}
+                onPress={openSupportCall}
+              >
+                <View style={styles.supportActionIconCall}>
+                  <Ionicons name="call-outline" size={20} color="#10B981" />
+                </View>
+                <View style={styles.supportActionTextWrap}>
+                  <Text style={styles.supportActionLabel}>Call</Text>
+                  <Text style={styles.supportActionValue}>{SUPPORT_PHONE}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -424,15 +579,37 @@ function FeatureItem({ icon, label, color, iconColor }) {
 }
 
 function RecentItem({ id, date, status }) {
+  const getStatusBgColor = (status) => {
+    if (!status) return '#D4EDDA';
+    const lowerStatus = status.toLowerCase();
+    if (lowerStatus.includes('confirmed') || lowerStatus.includes('pending')) return '#FFF3CD';
+    if (lowerStatus.includes('assigned')) return '#E7F3FF';
+    if (lowerStatus.includes('progress') || lowerStatus.includes('way')) return '#D1ECF1';
+    if (lowerStatus.includes('delivered') || lowerStatus.includes('completed')) return '#D4EDDA';
+    if (lowerStatus.includes('cancelled')) return '#F8D7DA';
+    return '#D4EDDA';
+  };
+
+  const getStatusTextColor = (status) => {
+    if (!status) return '#155724';
+    const lowerStatus = status.toLowerCase();
+    if (lowerStatus.includes('confirmed') || lowerStatus.includes('pending')) return '#856404';
+    if (lowerStatus.includes('assigned')) return '#004085';
+    if (lowerStatus.includes('progress') || lowerStatus.includes('way')) return '#0C5460';
+    if (lowerStatus.includes('delivered') || lowerStatus.includes('completed')) return '#155724';
+    if (lowerStatus.includes('cancelled')) return '#721C24';
+    return '#155724';
+  };
+
   return (
     <View style={styles.recentRow}>
       <View>
         <Text style={styles.recentId}>{id}</Text>
         <Text style={styles.recentDate}>{date}</Text>
       </View>
-      <View style={[styles.deliveredBadge, { backgroundColor: status === 'Assigned' ? '#FFF3CD' : status === 'In transit' ? '#D1ECF1' : '#D4EDDA' }]}>
-        <Text style={[styles.deliveredText, { color: status === 'Assigned' ? '#856404' : status === 'In transit' ? '#0C5460' : '#155724' }]}>
-          {status || 'Delivered'}
+      <View style={[styles.deliveredBadge, { backgroundColor: getStatusBgColor(status) }]}>
+        <Text style={[styles.deliveredText, { color: getStatusTextColor(status) }]}>
+          {status || 'Pending'}
         </Text>
       </View>
     </View>
@@ -509,6 +686,7 @@ const styles = StyleSheet.create({
 
   // ---------- CONTENT ----------
   contentBody: { paddingHorizontal: 20 },
+  scrollContent: { paddingBottom: 24 },
   heroWrapper: { width: '100%', marginTop: 20, alignSelf: 'center' },
   heroCard: {
     borderRadius: 28,
@@ -557,11 +735,71 @@ const styles = StyleSheet.create({
   featureIconBox: { width: 55, height: 55, borderRadius: 18, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
   featureLabel: { fontSize: 11, color: '#4B5563', fontWeight: '700' },
 
-  recentCard: { backgroundColor: '#FFF', borderRadius: 24, padding: 20, marginTop: 15, marginBottom: 20 },
+  recentCard: { backgroundColor: '#FFF', borderRadius: 24, padding: 20, marginTop: 15 },
   recentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   recentId: { fontSize: 14, fontWeight: '700', color: '#1A1C1E' },
   recentDate: { fontSize: 11, color: '#9CA3AF' },
   deliveredBadge: { backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10 },
   deliveredText: { fontSize: 11, color: '#6B7280', fontWeight: '700' },
   divider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 15 },
+
+  supportCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    padding: 20,
+    marginTop: 25,
+    marginBottom: 25,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  supportHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  supportIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFF7ED',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  supportHeaderText: { flex: 1 },
+  supportTitle: { fontSize: 17, fontWeight: '800', color: '#1A1C1E' },
+  supportSubtitle: { fontSize: 12, color: '#6B7280', marginTop: 4 },
+  supportActionsRow: { flexDirection: 'row', gap: 10 },
+  supportActionCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFA',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  supportActionIconEmail: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#FFF7ED',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  supportActionIconCall: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+  },
+  supportActionTextWrap: { flex: 1, minWidth: 0 },
+  supportActionLabel: { fontSize: 11, color: '#9CA3AF', fontWeight: '600' },
+  supportActionValue: { fontSize: 11, fontWeight: '800', color: '#1A1C1E', marginTop: 2 },
 });

@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '../constants/colors';
 import { USER_API_URL } from '../config';
+import { startBookingTask } from '../utils/trackingService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_SIZE = (SCREEN_WIDTH - 60) / 3;
@@ -89,11 +90,33 @@ export default function TaskDetailsScreen({ navigation, route }) {
   })();
   const referenceImage = referenceImageUri;
 
-  const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
-  const isOnTheWay = normalizeStatus(currentStatus) === 'on-the-way' || normalizeStatus(currentStatus) === 'on_the_way' || normalizeStatus(currentStatus) === 'picked_up';
+  const normalizeStatus = (value) => String(value || '').trim().toLowerCase().replace(/-/g, '_');
+  const isOnTheWay = normalizeStatus(currentStatus) === 'on_the_way' || normalizeStatus(currentStatus) === 'picked_up';
 
   useEffect(() => {
-    if (normalizeStatus(booking?.status) === 'on-the-way' || normalizeStatus(booking?.status) === 'on_the_way' || normalizeStatus(booking?.status) === 'picked_up') {
+    const maybeStartTask = async () => {
+      if (!bookingId) return;
+      const status = normalizeStatus(booking?.status || booking?.assignment_status || currentStatus);
+      if (status !== 'agent_assigned' && status !== 'accepted' && status !== 'assigned') return;
+      try {
+        const updated = await startBookingTask(
+          bookingId,
+          booking?.agentId || booking?.agent_id || booking?.preferredAgentId || null,
+        );
+        if (updated?.status) {
+          setCurrentStatus(String(updated.status).toLowerCase());
+        } else {
+          setCurrentStatus('in_progress');
+        }
+      } catch (error) {
+        console.warn('[TaskDetails] Auto-start skipped:', error?.message);
+      }
+    };
+    maybeStartTask();
+  }, [bookingId]);
+
+  useEffect(() => {
+    if (normalizeStatus(booking?.status) === 'on_the_way' || normalizeStatus(booking?.status) === 'picked_up') {
       setPickupConfirmed(true);
     }
   }, [booking?.status]);
@@ -270,9 +293,9 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
       console.log('[TaskDetails] Status updated successfully:', data.booking);
       if (newStatus === 'delivered') {
-        setCurrentStatus('delivered');
+        setCurrentStatus('completed');
       } else {
-        setCurrentStatus('on-the-way');
+        setCurrentStatus('on_the_way');
         setPickupConfirmed(true);
       }
       Alert.alert(

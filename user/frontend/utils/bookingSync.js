@@ -64,8 +64,7 @@ export const fetchLatestBooking = async (bookingId, token) => {
     return null;
   } catch (error) {
     console.error('[BookingSync] Error fetching booking:', error?.message || error);
-    // Return cached version on error
-    return await getCachedBooking(bookingId);
+    return null;
   }
 };
 
@@ -119,90 +118,39 @@ export const clearBookingCache = async (bookingId) => {
 
 /**
  * Get booking stage based on status
- * 0 = No booking
+ * 0 = No booking / Cancelled
  * 1 = Booking Confirmed
  * 2 = Driver Assigned
  * 3 = Pickup in Progress
  * 4 = On the Way
  * 5 = Delivered/Completed
  */
+const getBookingStageFromStatusValue = (rawStatus) => {
+  const status = String(rawStatus || '').trim().toLowerCase().replace(/-/g, '_');
+  if (!status || status === 'cancelled') return 0;
+  if (status === 'completed' || status === 'delivered') return 5;
+  if (status === 'on_the_way') return 4;
+  if (['picked_up', 'pickup_completed', 'en_route', 'picked'].includes(status)) return 4;
+  if (status === 'in_progress' || status === 'pickup_started' || status === 'at_pickup') return 3;
+  if (status === 'agent_assigned' || status === 'accepted' || status === 'assigned') return 2;
+  if (status === 'confirmed' || status === 'pending' || status === 'queued' || status === 'scheduled') return 1;
+  return 0;
+};
+
 export const getBookingStage = (booking) => {
   if (!booking) return 0;
 
-  const status = String(
-    booking?.status || booking?.booking_status || ''
-  ).trim().toLowerCase();
-
-  const assignmentStatus = String(
-    booking?.assignment_status || ''
-  ).trim().toLowerCase();
-
-  console.log('[BookingSync] Stage Debug:', {
-    status,
-    assignmentStatus,
-    booking,
-  });
-
-  // Stage 5 - Delivered
-  if (
-    booking?.delivered_at ||
-    status === 'completed' ||
-    status === 'delivered' ||
-    assignmentStatus === 'completed' ||
-    assignmentStatus === 'delivered'
-  ) {
-    return 5;
+  if (isCancelledBooking(booking)) {
+    return 0;
   }
 
-  // Stage 4 - On the Way
-  if (
-    booking?.pickup_completed_at ||
-    status === 'on_the_way' ||
-    status === 'on-the-way' ||
-    status === 'picked_up' ||
-    status === 'pickup_completed' ||
-    assignmentStatus === 'on_the_way' ||
-    assignmentStatus === 'on-the-way' ||
-    assignmentStatus === 'picked_up' ||
-    assignmentStatus === 'en_route' ||
-    assignmentStatus === 'pickup_completed'
-  ) {
-    return 4;
-  }
+  const stage = getBookingStageFromStatusValue(booking?.status);
+  if (stage > 0) return stage;
 
-  // Stage 3 - Pickup Started / In Progress
-  if (
-    booking?.pickup_started_at ||
-    status === 'in_progress' ||
-    status === 'in-progress' ||
-    status === 'pickup_started' ||
-    status === 'at_pickup' ||
-    assignmentStatus === 'in_progress' ||
-    assignmentStatus === 'in-progress' ||
-    assignmentStatus === 'at_pickup' ||
-    assignmentStatus === 'pickup_started'
-  ) {
-    return 3;
-  }
+  const assignmentStage = getBookingStageFromStatusValue(booking?.assignment_status);
+  if (assignmentStage > 0) return assignmentStage;
 
-  // Stage 2 - Agent Assigned
-if (
-  status === 'agent_assigned' ||
-  status === 'accepted' ||
-  status === 'assigned' ||
-  assignmentStatus === 'agent_assigned' ||
-  assignmentStatus === 'accepted' ||
-  assignmentStatus === 'assigned' ||
-  booking?.accepted_at
-) {
-  return 2;
-}
-  // Stage 1 - Booking Created
-  if (booking?.created_at) {
-    return 1;
-  }
-
-  return 0;
+  return booking?.created_at ? 1 : 0;
 };
 /**
  * Build timeline for UI display
@@ -253,11 +201,18 @@ export const buildTimeline = (booking) => {
 };
 
 export const getTrackingStatusLabel = (booking) => {
+  const status = String((booking?.status || booking?.booking_status || '') || '').trim().toLowerCase();
+  const assignmentStatus = String(booking?.assignment_status || '').trim().toLowerCase();
+  if (status === 'cancelled' || assignmentStatus === 'cancelled') {
+    return 'Cancelled';
+  }
+
   const stage = getBookingStage(booking);
   if (stage >= 5) return 'Completed';
   if (stage >= 4) return 'Luggage On The Way';
   if (stage >= 3) return 'In Progress';
   if (stage >= 2) return 'Agent Assigned';
+  if (stage >= 1) return 'Booking Confirmed';
   return 'Pending';
 };
 
@@ -389,6 +344,128 @@ export const formatEta = (minutes) => {
 };
 
 /**
+ * Check if booking is cancelled
+ */
+export const isCancelledBooking = (booking) => {
+  if (!booking) return false;
+  const status = String(booking?.status || booking?.booking_status || '').trim().toLowerCase();
+  const assignmentStatus = String(booking?.assignment_status || '').trim().toLowerCase();
+  return status === 'cancelled' || assignmentStatus === 'cancelled';
+};
+
+/**
+ * Active = not completed and not cancelled
+ */
+export const isActiveBooking = (booking) => {
+  if (!booking) return false;
+  return !isCompletedBooking(booking) && !isCancelledBooking(booking);
+};
+
+/**
+ * Pick the booking the user is most likely tracking right now.
+ */
+export const resolvePrimaryActiveBooking = (bookings, preferredBookingId = null) => {
+  if (!Array.isArray(bookings) || !bookings.length) return null;
+
+  const activeBookings = bookings.filter((booking) => isActiveBooking(booking));
+  if (!activeBookings.length) return null;
+
+  if (preferredBookingId) {
+    const preferred = activeBookings.find(
+      (booking) => Number(booking.id) === Number(preferredBookingId)
+    );
+    if (preferred) return preferred;
+  }
+
+  return activeBookings.reduce((best, current) => {
+    const bestStage = getBookingStage(best);
+    const currentStage = getBookingStage(current);
+    if (currentStage !== bestStage) {
+      return currentStage > bestStage ? current : best;
+    }
+
+    const bestTime = new Date(best.assigned_at || best.updated_at || best.created_at || 0).getTime();
+    const currentTime = new Date(current.assigned_at || current.updated_at || current.created_at || 0).getTime();
+    return currentTime > bestTime ? current : best;
+  });
+};
+
+/**
+ * Fetch all bookings for the logged-in user.
+ */
+export const fetchUserBookings = async (token) => {
+  if (!token) return null;
+
+  try {
+    const url = addCacheBust(`${API_BASE_URL}/api/bookings`);
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (!data.success || !Array.isArray(data.bookings)) return null;
+    return data.bookings;
+  } catch (error) {
+    console.warn('[BookingSync] Error fetching user bookings:', error?.message);
+    return null;
+  }
+};
+
+/**
+ * Fetch the primary active booking for the logged-in user.
+ */
+export const fetchLatestActiveBooking = async (token) => {
+  const bookings = await fetchUserBookings(token);
+  if (!bookings) return null;
+
+  const preferredId = await getActiveTrackingBooking();
+  return resolvePrimaryActiveBooking(bookings, preferredId);
+};
+
+/**
+ * Poll the bookings list so home / bookings screens stay in sync.
+ */
+export const startBookingsListPolling = (token, onUpdate, pollIntervalMs = 5000) => {
+  if (!token) return null;
+
+  const poll = async () => {
+    const bookings = await fetchUserBookings(token);
+    if (!bookings) return;
+
+    const preferredId = await getActiveTrackingBooking();
+    const activeBooking = resolvePrimaryActiveBooking(bookings, preferredId);
+
+    onUpdate({
+      bookings,
+      activeBooking,
+      recentBookings: bookings.slice(0, 3),
+    });
+  };
+
+  poll();
+  return setInterval(poll, pollIntervalMs);
+};
+
+/**
+ * Compare booking snapshots to avoid pointless UI churn.
+ */
+export const hasBookingStatusChanged = (previous, next) => {
+  if (!previous || !next) return true;
+  return (
+    String(previous.status || '') !== String(next.status || '') ||
+    String(previous.assignment_status || '') !== String(next.assignment_status || '') ||
+    String(previous.booking_status || '') !== String(next.booking_status || '') ||
+    Number(previous.assigned_agent_id || 0) !== Number(next.assigned_agent_id || 0)
+  );
+};
+
+/**
  * Store active booking ID for tracking
  */
 export const setActiveTrackingBooking = async (bookingId) => {
@@ -426,6 +503,13 @@ export default {
   stopBookingPolling,
   getDriverDetails,
   isCompletedBooking,
+  isCancelledBooking,
+  isActiveBooking,
+  fetchLatestActiveBooking,
+  fetchUserBookings,
+  resolvePrimaryActiveBooking,
+  startBookingsListPolling,
+  hasBookingStatusChanged,
   formatEta,
   setActiveTrackingBooking,
   getActiveTrackingBooking,

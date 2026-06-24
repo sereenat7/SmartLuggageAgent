@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { 
   View, Text, StyleSheet, FlatList, TouchableOpacity, 
   SafeAreaView, Platform, StatusBar, ActivityIndicator, RefreshControl, Alert
@@ -7,6 +7,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as bookingSync from '../../utils/bookingSync';
+import { API_BASE_URL } from '../../utils/api';
 
 export default function BookingsScreen() {
   const router = useRouter();
@@ -14,8 +16,42 @@ export default function BookingsScreen() {
   const [bookings, setBookings] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const pollingRef = useRef(null);
 
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/bookings`;
+  const API_URL = `${API_BASE_URL}/api/bookings`;
+
+  const transformBookings = useCallback((rawBookings) => {
+    return rawBookings.map((booking) => {
+      let formattedDate = 'N/A';
+      try {
+        if (booking.departure_date) {
+          const dateStr = booking.departure_date.trim();
+          const date = new Date(dateStr);
+          if (!isNaN(date.getTime())) {
+            formattedDate = date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
+          } else {
+            formattedDate = dateStr;
+          }
+        }
+      } catch (e) {
+        formattedDate = booking.departure_date || 'N/A';
+      }
+
+      const fullDestination = `${booking.arrival_airport || ''} ${booking.terminal || ''}`.trim() || 'N/A';
+
+      return {
+        ...booking,
+        booking_id: booking.id || booking.booking_id,
+        airline_flight: `${booking.airline_name || 'Unknown'} ${booking.flight_number || ''}`.trim(),
+        pickup_display: booking.pickup_address || booking.pickup_area || 'N/A',
+        destination_display: fullDestination,
+        pickup_date: formattedDate,
+        pickup_time_formatted: booking.pickup_time || booking.departure_time || 'N/A',
+        amount_paid: booking.amount || booking.amount_paid || booking.total_amount || 0,
+        status_type: (booking.status || booking.assignment_status || booking.booking_status || 'pending').toLowerCase(),
+      };
+    });
+  }, []);
 
   const fetchBookings = useCallback(async () => {
     setIsLoading(true);
@@ -24,90 +60,86 @@ export default function BookingsScreen() {
       if (!token) {
         Alert.alert("Not Logged In", "Please log in to view bookings");
         setBookings([]);
-        return;
+        return null;
       }
 
-      const response = await fetch(API_URL, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      const data = await response.json();
-
-      if (data.success && data.bookings && Array.isArray(data.bookings)) {
-        const transformedBookings = data.bookings.map(booking => {
-          let formattedDate = 'N/A';
-          try {
-            if (booking.departure_date) {
-              const dateStr = booking.departure_date.trim();
-              const date = new Date(dateStr);
-              if (!isNaN(date.getTime())) {
-                formattedDate = date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' });
-              } else {
-                formattedDate = dateStr;
-              }
-            }
-          } catch (e) {
-            formattedDate = booking.departure_date || 'N/A';
-          }
-
-          const fullDestination = `${booking.arrival_airport || ''} ${booking.terminal || ''}`.trim() || 'N/A';
-
-          return {
-            ...booking,
-            booking_id: booking.id || booking.booking_id,
-            airline_flight: `${booking.airline_name || 'Unknown'} ${booking.flight_number || ''}`.trim(),
-            pickup_display: booking.pickup_address || booking.pickup_area || 'N/A',
-            destination_display: fullDestination,
-            pickup_date: formattedDate,
-            pickup_time_formatted: booking.pickup_time || booking.departure_time || 'N/A',
-            amount_paid: booking.amount || booking.amount_paid || booking.total_amount || 0,
-            status_type: (booking.status || booking.booking_status || 'pending').toLowerCase(),
-          };
-        });
-        setBookings(transformedBookings);
+      const rawBookings = await bookingSync.fetchUserBookings(token);
+      if (rawBookings) {
+        setBookings(transformBookings(rawBookings));
       } else {
         setBookings([]);
       }
+      return token;
     } catch (error) {
       setBookings([]);
+      return null;
     } finally {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [transformBookings]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchBookings();
-    }, [fetchBookings])
+      let isActive = true;
+
+      const bootstrap = async () => {
+        const token = await fetchBookings();
+        if (!isActive || !token) return;
+
+        if (pollingRef.current) {
+          bookingSync.stopBookingPolling(pollingRef.current);
+        }
+
+        pollingRef.current = bookingSync.startBookingsListPolling(
+          token,
+          (snapshot) => {
+            if (!isActive || !snapshot?.bookings) return;
+            setBookings(transformBookings(snapshot.bookings));
+          },
+          5000
+        );
+      };
+
+      bootstrap();
+
+      return () => {
+        isActive = false;
+        if (pollingRef.current) {
+          bookingSync.stopBookingPolling(pollingRef.current);
+          pollingRef.current = null;
+        }
+      };
+    }, [fetchBookings, transformBookings])
   );
 
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'assigned': return { bg: '#FFF3E0', text: '#E65100', label: 'Assigned' };
-      case 'in transit': case 'picked': return { bg: '#E3F2FD', text: '#1565C0', label: 'In Transit' };
-      case 'delivered': case 'completed': return { bg: '#E8F5E9', text: '#2E7D32', label: 'Delivered' };
-      default: return { bg: '#F5F5F5', text: '#616161', label: status };
-    }
+  const getStatusColor = (booking) => {
+    const label = bookingSync.getTrackingStatusLabel(booking);
+    const stage = bookingSync.getBookingStage(booking);
+    if (stage >= 5) return { bg: '#E8F5E9', text: '#2E7D32', label };
+    if (stage >= 4) return { bg: '#E3F2FD', text: '#1565C0', label };
+    if (stage >= 3) return { bg: '#E3F2FD', text: '#1565C0', label };
+    if (stage >= 2) return { bg: '#FFF3E0', text: '#E65100', label };
+    if (bookingSync.isCancelledBooking(booking)) return { bg: '#FFEBEE', text: '#C62828', label: 'Cancelled' };
+    return { bg: '#F5F5F5', text: '#616161', label };
   };
 
-  const filteredBookings = bookings.filter(item => {
+  const filteredBookings = bookings.filter((item) => {
     if (activeTab === 'current') {
-      return !['delivered', 'completed'].includes(item.status_type);
-    } else {
-      return ['delivered', 'completed'].includes(item.status_type);
+      return bookingSync.isActiveBooking(item);
     }
+    return bookingSync.isCompletedBooking(item) || bookingSync.isCancelledBooking(item);
   });
 
   const renderBookingCard = ({ item }) => {
-    const statusColor = getStatusColor(item.status_type);
+    const statusColor = getStatusColor(item);
     
     return (
       <TouchableOpacity 
         style={styles.card}
         onPress={() => router.push({
-          pathname: '/booking-details',
-          params: { bookingId: item.booking_id }
+          pathname: '/(booking)/booking-details',
+          params: { bookingId: String(item.booking_id) },
         })}
         activeOpacity={0.8}
       >

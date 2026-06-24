@@ -4,6 +4,7 @@ const { latLngToCell, gridDistance } = require("h3-js");
 const router = express.Router();
 const db = require("../db");
 const { computeAgentSchedule, PICKUP_PREP_BUFFER_MIN } = require("../utils/agentSchedule");
+const { BOOKING_STATUS, advanceBookingStatus } = require("../utils/bookingStatus");
 
 const H3_RESOLUTION = 8;
 const DEFAULT_CITY_SPEED_KMPH = 28;
@@ -922,30 +923,82 @@ router.post("/respond-request", async (req, res) => {
       });
     }
     const existingSessionRows = await runQuery(
-      `SELECT session_id, agent_id, start_time FROM agent_sessions
+      `SELECT session_id, agent_id, booking_id FROM agent_sessions
        WHERE user_id = ? AND status = 'active' ORDER BY start_time DESC LIMIT 1`,
       [request.user_id]
     );
     if (existingSessionRows.length > 0) {
-      // ✅ FIXED: was WHERE queue_id = ?
+      const existing = existingSessionRows[0];
+
+      if (request.booking_id) {
+        try {
+          await advanceBookingStatus(db, request.booking_id, BOOKING_STATUS.AGENT_ASSIGNED, {
+            assigned_agent_id: resolvedAgentId,
+            assigned_at: 'RAW:COALESCE(assigned_at, CURRENT_TIMESTAMP)',
+          });
+        } catch (statusErr) {
+          if (statusErr.code === 'INVALID_TRANSITION') {
+            return res.status(409).json({ success: false, message: statusErr.message });
+          }
+          throw statusErr;
+        }
+      }
+
+      let sessionId = existing.session_id;
+      if (Number(existing.booking_id) !== Number(request.booking_id)) {
+        const sessionResult = await runQuery(
+          `INSERT INTO agent_sessions (user_id, booking_id, agent_id, status, start_time)
+           VALUES (?, ?, ?, 'active', CURRENT_TIMESTAMP)`,
+          [request.user_id, request.booking_id, resolvedAgentId]
+        );
+        sessionId = sessionResult.insertId;
+      }
+
+      await runQuery(
+        `UPDATE support_agents SET status = 'busy', current_user_id = ?,
+         name = COALESCE(NULLIF(?, ''), name),
+         phone = COALESCE(NULLIF(?, ''), phone),
+         last_assigned_at = CURRENT_TIMESTAMP
+         WHERE agent_id = ?`,
+        [request.user_id, agentName || null, agentPhone || null, resolvedAgentId]
+      );
+
+      if (agentName || agentPhone) {
+        await runQuery(
+          `UPDATE support_agents
+           SET name = COALESCE(NULLIF(?, ''), name),
+               phone = COALESCE(NULLIF(?, ''), phone)
+           WHERE agent_id = ?`,
+          [agentName || null, agentPhone || null, resolvedAgentId]
+        );
+      }
+
       await runQuery(
         "DELETE FROM agent_queue WHERE id = ? AND status = 'waiting'",
         [queueId]
       );
+
       return res.json({
-        success: true, action: 'accepted',
-        message: 'Request already has an active session',
+        success: true,
+        action: 'accepted',
+        message: `Request accepted${agentName ? ` by ${agentName}` : ''}`,
         session: {
-          sessionId: existingSessionRows[0].session_id, bookingId: request.booking_id,
-          userId: request.user_id, userName: request.name, userPhone: request.phone,
-          agentId: existingSessionRows[0].agent_id,
+          sessionId,
+          bookingId: request.booking_id,
+          userId: request.user_id,
+          userName: request.name,
+          userPhone: request.phone,
+          agentId: resolvedAgentId,
         },
       });
     }
     const updateResult = await runQuery(
-      `UPDATE support_agents SET status = 'busy', current_user_id = ?, last_assigned_at = CURRENT_TIMESTAMP
+      `UPDATE support_agents SET status = 'busy', current_user_id = ?,
+       name = COALESCE(NULLIF(?, ''), name),
+       phone = COALESCE(NULLIF(?, ''), phone),
+       last_assigned_at = CURRENT_TIMESTAMP
        WHERE agent_id = ? AND status = 'available'`,
-      [request.user_id, resolvedAgentId]
+      [request.user_id, agentName || null, agentPhone || null, resolvedAgentId]
     );
     if (!updateResult.affectedRows) {
       return res.status(409).json({ success: false, message: "Agent is not available" });
@@ -956,9 +1009,25 @@ router.post("/respond-request", async (req, res) => {
       [request.user_id, request.booking_id, resolvedAgentId]
     );
     if (request.booking_id) {
+      try {
+        await advanceBookingStatus(db, request.booking_id, BOOKING_STATUS.AGENT_ASSIGNED, {
+          assigned_agent_id: resolvedAgentId,
+          assigned_at: 'RAW:COALESCE(assigned_at, CURRENT_TIMESTAMP)',
+        });
+      } catch (statusErr) {
+        if (statusErr.code === 'INVALID_TRANSITION') {
+          return res.status(409).json({ success: false, message: statusErr.message });
+        }
+        throw statusErr;
+      }
+    }
+    if (agentName || agentPhone) {
       await runQuery(
-        "UPDATE bookings SET status = 'assigned', assignment_status = 'assigned' WHERE id = ?",
-        [request.booking_id]
+        `UPDATE support_agents
+         SET name = COALESCE(NULLIF(?, ''), name),
+             phone = COALESCE(NULLIF(?, ''), phone)
+         WHERE agent_id = ?`,
+        [agentName || null, agentPhone || null, resolvedAgentId]
       );
     }
     // ✅ FIXED: was WHERE queue_id = ?
@@ -1021,6 +1090,42 @@ router.get("/assignment-status", verifyToken, async (req, res) => {
 });
 
 // H3 + schedule health for a booking (debug / verify H3 pipeline)
+router.get("/profile/:agentId", async (req, res) => {
+  try {
+    const agentId = Number(req.params.agentId);
+    if (!agentId) {
+      return res.status(400).json({ success: false, message: "agentId required" });
+    }
+    const rows = await runQuery(
+      `SELECT agent_id, name, phone, latitude, longitude, vehicle_type, status, location_updated_at
+       FROM support_agents WHERE agent_id = ? LIMIT 1`,
+      [agentId]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: "Agent not found" });
+    }
+    const row = rows[0];
+    const resolvedName = String(row.name || '').trim();
+    return res.json({
+      success: true,
+      agent: {
+        agentId: row.agent_id,
+        id: row.agent_id,
+        name: resolvedName && resolvedName.toLowerCase() !== 'agent' ? resolvedName : row.name,
+        phone: row.phone,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        vehicleType: row.vehicle_type,
+        vehicleNumber: row.vehicle_type,
+        locationUpdatedAt: row.location_updated_at,
+      },
+    });
+  } catch (error) {
+    console.error("agent profile error:", error);
+    return res.status(500).json({ success: false, message: "Failed to load agent profile" });
+  }
+});
+
 router.get("/h3-status/:bookingId", async (req, res) => {
   try {
     const bookingId = Number(req.params.bookingId);
@@ -1105,12 +1210,14 @@ router.patch("/arrived", async (req, res) => {
     }
     const session = sessionRows[0];
     try {
-      await runQuery(
-        "UPDATE bookings SET status = 'in-progress', assignment_status = 'at_pickup' WHERE id = ?",
-        [session.booking_id]
-      );
-    } catch (_bookingStatusErr) {
-      // keep session active even if status enum differs
+      await advanceBookingStatus(db, session.booking_id, BOOKING_STATUS.IN_PROGRESS, {
+        pickup_started_at: 'RAW:COALESCE(pickup_started_at, CURRENT_TIMESTAMP)',
+      });
+    } catch (statusErr) {
+      if (statusErr.code === 'INVALID_TRANSITION') {
+        return res.status(409).json({ success: false, message: statusErr.message });
+      }
+      throw statusErr;
     }
     return res.json({
       success: true,

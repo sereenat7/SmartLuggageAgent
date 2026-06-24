@@ -259,7 +259,16 @@ const queueBookingForAgentDashboard = async (booking, bestAgent) => {
 
   await runQuery(
     `UPDATE bookings
-     SET status = 'queued', assignment_status = 'queued', assigned_agent_id = ?
+     SET assigned_agent_id = ?,
+         assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP),
+         status = CASE
+           WHEN status IN ('pending', 'scheduled', 'queued') THEN 'confirmed'
+           ELSE status
+         END,
+         assignment_status = CASE
+           WHEN assignment_status IN ('pending', 'scheduled', 'queued') THEN 'confirmed'
+           ELSE assignment_status
+         END
      WHERE id = ?`,
     [preferredAgentId, booking.id]
   );
