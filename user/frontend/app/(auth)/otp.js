@@ -15,7 +15,7 @@ export default function OtpScreen() {
     if (otpValue.length !== 6) { Alert.alert("Error", "Please enter a 6-digit OTP"); return; }
     
     try {
-      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/auth/verify-otp`, {
+      const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/auth/verify-otp`, {
         method: "POST", 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, otp: otpValue })

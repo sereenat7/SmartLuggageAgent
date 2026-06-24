@@ -10,6 +10,8 @@ import TaskDetailsScreen from '../screens/TaskDetailsScreen';
 import AgentTrackingScreen from '../screens/AgentTrackingScreen';
 import ProfileScreen    from '../screens/ProfileScreen';
 import AgentRouteMapScreen from '../screens/AgentRouteMapScreen';
+import QrScannerScreen from '../screens/QrScannerScreen';
+import QrVerificationScreen from '../screens/QrVerificationScreen';
 
 import NativeLandingScreen from '../screens/NativeLandingScreen';
 import Colors from '../constants/colors';
@@ -39,6 +41,8 @@ export default function RootNavigator() {
       <Stack.Screen name="KYCForm"     component={KYCFormScreen}      options={{ headerShown: false }} />
       <Stack.Screen name="Dashboard"   component={DashboardScreen}    options={{ headerShown: false }} />
       <Stack.Screen name="TaskDetails" component={TaskDetailsScreen}  options={{ headerShown: false }} />
+      <Stack.Screen name="QrScanner" component={QrScannerScreen}      options={{ headerShown: false }} />
+      <Stack.Screen name="QrVerification" component={QrVerificationScreen} options={{ headerShown: false }} />
       <Stack.Screen name="AgentTracking" component={AgentTrackingScreen} options={{ headerShown: false }} />
       <Stack.Screen name="AgentRouteMap" component={AgentRouteMapScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Profile"     component={ProfileScreen}      options={{ headerShown: false }} />

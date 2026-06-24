@@ -5,10 +5,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 export default function PickupDetails() {
   const router = useRouter();
@@ -253,16 +253,6 @@ export default function PickupDetails() {
           <Text style={styles.helperText}>
             We recommend this pickup time to help you reach the airport comfortably.
           </Text>
-
-          {showTimePicker && (
-            <DateTimePicker 
-              value={pickupTime} 
-              mode="time" 
-              is24Hour={false} 
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'} 
-              onChange={(e, d) => { setShowTimePicker(false); if(d) setPickupTime(d); }} 
-            />
-          )}
         </View>
 
         <View style={styles.sectionCard}>
@@ -280,6 +270,19 @@ export default function PickupDetails() {
         </TouchableOpacity>
 
       </KeyboardAwareScrollView>
+
+      {showTimePicker && (
+        <DateTimePicker
+          value={pickupTime}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(event, selectedTime) => {
+            if (selectedTime) setPickupTime(selectedTime);
+            if (Platform.OS === 'android') setShowTimePicker(false);
+          }}
+          is24Hour={false}
+        />
+      )}
     </SafeAreaView>
   );
 }

@@ -9,10 +9,10 @@ export function getPool() {
 
   pool = mysql.createPool({
     host: process.env.MYSQL_HOST || "localhost",
-    port: Number(process.env.MYSQL_PORT || 3306), // 3307 matches local MySQL Workbench default in .env
+    port: Number(process.env.MYSQL_PORT || 3307), // 3307 matches local MySQL Workbench default in .env
     user: process.env.MYSQL_USER || "root",
     password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE || "smartluggage",
+    database: process.env.MYSQL_DATABASE || "smart_luggage",
     waitForConnections: true,
     connectionLimit: 10,
     maxIdle: 10,
@@ -37,7 +37,7 @@ export async function testConnection() {
     console.error("❌ MySQL connection failed:", err.message);
     console.error(
       "   Check that MySQL Workbench is running on port",
-      process.env.MYSQL_PORT || 3306,
+      process.env.MYSQL_PORT || 3307,
       "and that .env credentials are correct."
     );
     process.exit(1);

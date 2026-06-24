@@ -635,7 +635,18 @@ router.get("/inbox", async (req, res) => {
   try {
     let currentAgentId = Number(req.query?.agentId) || Number(req.query?.agent_id) || null;
     const currentAgentPhoneRaw = req.query?.phone || req.query?.mobile || req.query?.agentPhone || null;
-    if (currentAgentPhoneRaw) {
+
+    if (currentAgentId) {
+      const agentRows = await runQuery(
+        "SELECT agent_id FROM support_agents WHERE agent_id = ? OR current_user_id = ? LIMIT 1",
+        [currentAgentId, currentAgentId]
+      );
+      if (agentRows.length) {
+        currentAgentId = Number(agentRows[0].agent_id) || null;
+      }
+    }
+
+    if (!currentAgentId && currentAgentPhoneRaw) {
       const digits = String(currentAgentPhoneRaw).replace(/\D+/g, "");
       const lastTen = digits.slice(-10);
       if (lastTen) {
@@ -646,7 +657,7 @@ router.get("/inbox", async (req, res) => {
           [`%${lastTen}`]
         );
         if (phoneAgentRows.length) {
-          currentAgentId = Number(phoneAgentRows[0].agent_id) || currentAgentId;
+          currentAgentId = Number(phoneAgentRows[0].agent_id) || null;
         }
       }
     }
@@ -673,6 +684,7 @@ router.get("/inbox", async (req, res) => {
        JOIN users u ON u.id = q.user_id
        LEFT JOIN bookings b ON b.id = q.booking_id
        WHERE q.status = 'waiting'
+         AND q.requested_at >= DATE_SUB(NOW(), INTERVAL 2 DAY)
        ORDER BY q.requested_at ASC`
     );
     const visibleWaiting = [];
@@ -923,8 +935,8 @@ router.post("/respond-request", async (req, res) => {
     }
     const existingSessionRows = await runQuery(
       `SELECT session_id, agent_id, start_time FROM agent_sessions
-       WHERE user_id = ? AND status = 'active' ORDER BY start_time DESC LIMIT 1`,
-      [request.user_id]
+       WHERE user_id = ? AND booking_id = ? AND status = 'active' ORDER BY start_time DESC LIMIT 1`,
+      [request.user_id, request.booking_id]
     );
     if (existingSessionRows.length > 0) {
       // ✅ FIXED: was WHERE queue_id = ?
@@ -1106,7 +1118,7 @@ router.patch("/arrived", async (req, res) => {
     const session = sessionRows[0];
     try {
       await runQuery(
-        "UPDATE bookings SET status = 'in-progress', assignment_status = 'at_pickup' WHERE id = ?",
+        "UPDATE bookings SET status = 'in-progress', assignment_status = 'at_pickup', destination_qr_unlocked_at = COALESCE(destination_qr_unlocked_at, CURRENT_TIMESTAMP) WHERE id = ?",
         [session.booking_id]
       );
     } catch (_bookingStatusErr) {

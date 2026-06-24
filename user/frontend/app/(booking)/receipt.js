@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import * as Print from 'expo-print';
+import { Image } from 'react-native';
 
 export default function ReceiptScreen() {
   const router = useRouter();
@@ -74,7 +75,7 @@ export default function ReceiptScreen() {
       // Try to fetch booking details
       try {
         const response = await fetch(
-          `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/bookings/${bookingId}`,
+          `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/bookings/${bookingId}`,
           {
             method: 'GET',
             headers: {
@@ -108,7 +109,9 @@ export default function ReceiptScreen() {
                 luggage_count: booking.bag_count || 0,
                 total_weight: booking.bag_weight || 0,
                 fragile_items: booking.is_fragile || false,
-                status: booking.status || 'confirmed'
+                status: booking.status || 'confirmed',
+                pickup_qr_image: booking.pickup_qr_image || null,
+                destination_qr_image: booking.destination_qr_image || null,
               },
               payment: {
                 amount: booking.amount || 0,
@@ -148,7 +151,9 @@ export default function ReceiptScreen() {
           luggage_count: 0,
           total_weight: 0,
           fragile_items: false,
-          status: 'confirmed'
+          status: 'confirmed',
+          pickup_qr_image: null,
+          destination_qr_image: null,
         },
         payment: {
           amount: 0,
@@ -186,7 +191,9 @@ export default function ReceiptScreen() {
             luggage_count: 0,
             total_weight: 0,
             fragile_items: false,
-            status: 'confirmed'
+            status: 'confirmed',
+            pickup_qr_image: null,
+            destination_qr_image: null,
           },
           payment: {
             amount: 0,
@@ -388,6 +395,37 @@ export default function ReceiptScreen() {
             font-size: 11px;
             margin-top: 10px;
           }
+          .qr-section {
+            text-align: center;
+            padding: 30px;
+          }
+          .qr-section-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid #FF8E53;
+            display: inline-block;
+            padding-bottom: 12px;
+          }
+          .qr-code-image {
+            max-width: 200px;
+            height: auto;
+            margin: 0 auto;
+            display: block;
+            border: 2px solid #f0f0f0;
+            padding: 10px;
+            border-radius: 8px;
+            background: white;
+          }
+          .qr-instructions {
+            font-size: 12px;
+            color: #666;
+            margin-top: 15px;
+            font-style: italic;
+          }
           .print-divider {
             page-break-after: avoid;
           }
@@ -524,6 +562,18 @@ export default function ReceiptScreen() {
               <span class="info-label">Status</span>
               <span class="info-value" style="color: #34C759; font-weight: bold;">${payment.status ? payment.status.toUpperCase() : 'PAID'}</span>
             </div>
+          </div>
+
+          <div class="section qr-section">
+            <div class="qr-section-title">Luggage Verification QR</div>
+            ${booking.pickup_qr_image ? `
+              <img src="${booking.pickup_qr_image}" alt="Pickup QR Code" class="qr-code-image" />
+              <div class="qr-instructions">
+                Present this QR code to the agent at pickup time for verification
+              </div>
+            ` : `
+              <div style="color: #999; font-size: 13px;">QR code not available</div>
+            `}
           </div>
 
           <div class="footer">
@@ -749,6 +799,21 @@ export default function ReceiptScreen() {
           <Text style={styles.currencyCode}>INR</Text>
           <View style={styles.amountDivider} />
           <Text style={styles.amountNote}>Payment completed successfully</Text>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Feather name="shield" size={20} color="#FF8E53" />
+            <Text style={styles.sectionTitle}>Luggage Verification QR</Text>
+          </View>
+          <View style={styles.qrCard}>
+            <Text style={styles.qrTitle}>Pickup QR</Text>
+            {booking.pickup_qr_image ? (
+              <Image source={{ uri: booking.pickup_qr_image }} style={styles.qrImage} />
+            ) : (
+              <View style={styles.qrPlaceholder}><Text style={styles.qrPlaceholderText}>Pickup QR unavailable</Text></View>
+            )}
+          </View>
         </View>
 
         {/* Booking Information */}
@@ -1091,6 +1156,50 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  qrCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  qrCardLocked: {
+    opacity: 0.72,
+  },
+  qrTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  qrImage: {
+    width: 180,
+    height: 180,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+  },
+  qrPlaceholder: {
+    width: 180,
+    height: 180,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#D1D5DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FAFAFA',
+    padding: 16,
+  },
+  qrPlaceholderText: {
+    textAlign: 'center',
+    color: '#6B7280',
+    fontSize: 13,
+    fontWeight: '600',
   },
   section: {
     backgroundColor: '#fff',

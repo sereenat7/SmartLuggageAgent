@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   StatusBar,
+  AppState,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -31,7 +32,7 @@ export default function RazorpayPaymentScreen() {
   // Test backend connectivity
   const testBackendConnection = async () => {
     try {
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000';
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000';
       console.log('🔌 Testing backend connectivity to:', apiUrl);
       
       const response = await fetch(`${apiUrl}/health`, {
@@ -58,8 +59,60 @@ export default function RazorpayPaymentScreen() {
     }
     // Test backend connectivity on component load
     testBackendConnection();
+    
+    // Backup check when app comes back to foreground (handles GPay external redirect)
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => {
+      subscription.remove();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId, amount, apiKey]);
+
+  const handleAppStateChange = async (nextAppState) => {
+    console.log('📱 App state changed:', nextAppState);
+    
+    // When app comes back to foreground from external payment app (like GPay)
+    if (nextAppState === 'active') {
+      console.log('🔄 App returned to foreground - checking if payment succeeded...');
+      // Wait a moment for the payment webhook to process
+      setTimeout(async () => {
+        await backupPaymentVerification();
+      }, 2000);
+    }
+  };
+
+  const backupPaymentVerification = async () => {
+    try {
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000';
+      const checkUrl = `${apiUrl}/api/payment/check-order-status/${orderId}`;
+      
+      const response = await fetch(checkUrl, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userToken}`,
+        },
+      });
+
+      const data = await response.json();
+      console.log('🔍 Backup verification check:', data);
+
+      // If order is captured/paid, redirect to receipt even if WebView callback didn't fire
+      if (data.status === 'captured' || data.status === 'authorized') {
+        console.log('✅ Backup verification: Payment found! Redirecting to receipt...');
+        router.replace({
+          pathname: '/(booking)/receipt',
+          params: {
+            bookingId: data.bookingId || orderId,
+          },
+        });
+      }
+    } catch (error) {
+      console.log('ℹ️ Backup verification check (non-critical):', error.message);
+      // This is not critical - the user will see the success page if payment went through
+    }
+  };
 
   const handlePaymentSuccess = async (paymentResponse) => {
     try {
@@ -84,7 +137,7 @@ export default function RazorpayPaymentScreen() {
 
       console.log('✅ STEP 3: Payment Details prepared:', paymentDetails);
 
-      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000';
+      const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000';
       const verifyUrl = `${apiUrl}/api/payment/verify-payment`;
       console.log(`✅ STEP 4: API URL ready: ${verifyUrl}`);
       console.log(`✅ STEP 4: Token: ${userToken ? userToken.substring(0, 20) + '...' : 'NO TOKEN'}`);
@@ -217,7 +270,7 @@ export default function RazorpayPaymentScreen() {
           netbanking: true,
           card: true,
           wallet: true,
-          google_pay: false,
+          google_pay: true,
           opl: false,
           paylater: false,
           emandate: 'netbanking'
@@ -240,6 +293,14 @@ export default function RazorpayPaymentScreen() {
           } else {
             console.error('❌ ReactNativeWebView not available - cannot send message');
           }
+          
+          // Fallback: Send another message after a short delay to ensure delivery
+          setTimeout(() => {
+            if (window.ReactNativeWebView) {
+              window.ReactNativeWebView.postMessage(JSON.stringify(message));
+              console.log('✅ Backup message sent via ReactNativeWebView');
+            }
+          }, 500);
         },
         modal: {
           ondismiss: function() {
@@ -271,6 +332,13 @@ export default function RazorpayPaymentScreen() {
 
       rzp1.on('payment.success', function (response) {
         console.log('✅ Payment Success event fired:', response);
+        const message = {
+          type: 'PAYMENT_SUCCESS',
+          data: response
+        };
+        if (window.ReactNativeWebView) {
+          window.ReactNativeWebView.postMessage(JSON.stringify(message));
+        }
       });
 
       console.log('🔧 Opening Razorpay payment gateway...');

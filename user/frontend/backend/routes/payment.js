@@ -4,6 +4,7 @@ const Razorpay = require("razorpay");
 const crypto = require("crypto");
 const db = require("../db");
 const { queueBookingForAgentDashboard } = require("./bookings");
+const { createBookingQrManifest } = require("../utils/bookingQr");
 const fs = require("fs");
 const path = require("path");
 
@@ -33,12 +34,25 @@ router.use((req, res, next) => {
 const formatDate = (date) => {
   if (!date) return null;
   if (typeof date === 'string') {
+    date = date.trim();
     // If already in YYYY-MM-DD format, return as is
     if (date.match(/^\d{4}-\d{2}-\d{2}$/)) return date;
+    
+    // Handle DD/MM/YYYY format (from frontend)
+    if (date.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+      const parts = date.split('/');
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2];
+      return `${year}-${month}-${day}`;
+    }
+    
     // Try to parse and reformat
     try {
       const d = new Date(date);
-      return d.toISOString().split('T')[0];
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().split('T')[0];
+      }
     } catch (e) {
       return null;
     }
@@ -329,6 +343,18 @@ router.post("/verify-payment", verifyToken, async (req, res) => {
         paymentLog('✅ Booking created successfully - ID: ' + bookingId);
         console.log('Booking created successfully - ID:', bookingId);
 
+        const qrManifest = createBookingQrManifest(bookingId);
+        db.query(
+          "UPDATE bookings SET qr_manifest = ? WHERE id = ?",
+          [JSON.stringify(qrManifest), bookingId],
+          (qrErr) => {
+            if (qrErr) {
+              paymentLog('⚠️ Failed to persist QR manifest: ' + qrErr.message);
+              console.error('Failed to persist QR manifest:', qrErr);
+            }
+          }
+        );
+
         // Queue booking for agent dashboard
         try {
           const queueResult = await queueBookingForAgentDashboard(bookingId, req.phone);
@@ -499,6 +525,80 @@ router.get("/status/:orderId", verifyToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch payment status",
+      error: error.message
+    });
+  }
+});
+
+// Check Order Status (Backup verification for GPay and external payment methods)
+router.get("/check-order-status/:orderId", verifyToken, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const phone = req.phone;
+
+    paymentLog(`🔍 Check order status request: ${orderId} for phone: ${phone}`);
+
+    // Check if booking exists with this order ID
+    const query = `
+      SELECT id, razorpay_order_id, payment_status, amount FROM bookings 
+      WHERE razorpay_order_id = ? AND phone = ?
+      LIMIT 1
+    `;
+
+    db.query(query, [orderId, phone], async (err, results) => {
+      if (err) {
+        console.error("Database query error:", err);
+        return res.json({ 
+          success: false, 
+          message: "DB Error", 
+          error: err 
+        });
+      }
+
+      if (results.length === 0) {
+        paymentLog(`❌ No booking found for order: ${orderId}`);
+        return res.json({
+          success: false,
+          status: 'not_found',
+          message: "No booking found for this order"
+        });
+      }
+
+      const booking = results[0];
+      paymentLog(`✅ Booking found: ${booking.id}, Payment status: ${booking.payment_status}`);
+
+      // Check if payment is completed
+      if (booking.payment_status === 'completed') {
+        return res.json({
+          success: true,
+          status: 'captured',
+          bookingId: booking.id,
+          amount: booking.amount,
+          message: "Payment successfully captured"
+        });
+      } else if (booking.payment_status === 'authorized') {
+        return res.json({
+          success: true,
+          status: 'authorized',
+          bookingId: booking.id,
+          amount: booking.amount,
+          message: "Payment authorized"
+        });
+      } else {
+        return res.json({
+          success: true,
+          status: booking.payment_status,
+          bookingId: booking.id,
+          amount: booking.amount,
+          message: `Payment status: ${booking.payment_status}`
+        });
+      }
+    });
+  } catch (error) {
+    console.error("Error checking order status:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to check order status",
       error: error.message
     });
   }

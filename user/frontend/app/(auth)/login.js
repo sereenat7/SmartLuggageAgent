@@ -19,8 +19,9 @@ import { triggerLoginNotification } from "../../utils/notificationService";
 export default function LoginScreen() {
   const params = useLocalSearchParams();
   const phoneFromParams = params?.phone?.replace("+91", "") || "";
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000';
 
-  const [mode, setMode] = useState("otp");
+  const [mode, setMode] = useState("password");
   const [focus, setFocus] = useState("");
   const [phone, setPhone] = useState(phoneFromParams);
   const [password, setPassword] = useState("");
@@ -46,17 +47,17 @@ export default function LoginScreen() {
         ? { phone: "+91" + phone } 
         : { phone: "+91" + phone, password: password };
 
-      const response = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/auth${endpoint}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json"
-          },
-          body: JSON.stringify(body)
-        }
-      );
+      const requestUrl = `${API_URL}/api/auth${endpoint}`;
+      console.log('USER LOGIN request', requestUrl, body);
+
+      const response = await fetch(requestUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json"
+        },
+        body: JSON.stringify(body)
+      });
 
       const data = await response.json();
 
@@ -107,9 +108,10 @@ export default function LoginScreen() {
         Alert.alert("Login Failed", data.message || "Invalid credentials");
       }
     } catch (err) {
+      console.error("USER LOGIN fetch error:", err);
       Alert.alert(
         "Network error",
-        "Make sure laptop & phone are on same Wi-Fi."
+        `Make sure laptop & phone are on same Wi-Fi.\n${err.message}`
       );
     } finally {
       setLoading(false);

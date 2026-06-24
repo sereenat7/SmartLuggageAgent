@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  SafeAreaView, StatusBar, ActivityIndicator, Alert, Platform
+  SafeAreaView, StatusBar, ActivityIndicator, Alert, Platform, Image
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,11 +14,17 @@ export default function BookingDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [booking, setBooking] = useState(null);
 
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/bookings`;
+  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/bookings`;
 
   useEffect(() => {
     fetchBookingDetails();
-  }, []);
+
+    const interval = setInterval(() => {
+      fetchBookingDetails();
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [bookingId]);
 
   const fetchBookingDetails = async () => {
     try {
@@ -108,6 +114,35 @@ export default function BookingDetailsScreen() {
       <Text style={styles.detailValue}>{value}</Text>
     </View>
   );
+
+  const formatVerificationTime = (value) => {
+    if (!value) return 'Pending';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
+  const statusValue = String(booking?.booking_status || booking?.status || '').toLowerCase();
+  const isPickupVerified = Boolean(
+    booking.pickup_verified ||
+    booking.pickupVerified ||
+    booking.pickup_verified_at ||
+    booking.pickupVerifiedAt ||
+    statusValue === 'picked' ||
+    statusValue === 'picked_up' ||
+    statusValue === 'in transit' ||
+    statusValue === 'delivered'
+  );
+
+  const pickupVerificationAgentName = booking.pickup_verified_by_agent_name || booking.pickupVerifiedByAgentName || booking.verified_by_agent_name || 'Agent';
+  const pickupVerificationAgentId = booking.pickup_verified_by_agent_id || booking.pickupVerifiedByAgentId || 'N/A';
+  const pickupVerificationTimestamp = booking.pickup_verified_at || booking.pickupVerifiedAt;
 
   return (
     <View style={styles.container}>
@@ -231,6 +266,67 @@ export default function BookingDetailsScreen() {
           </View>
         )}
 
+        {/* Pickup Verification Status */}
+        {renderSection(
+          'Pickup Verification',
+          'check-decagram',
+          <View>
+            {isPickupVerified ? (
+              <View style={styles.verificationSuccessCard}>
+                <View style={styles.verificationIconRow}>
+                  <MaterialCommunityIcons name="check-circle" size={24} color="#2E7D32" />
+                  <Text style={styles.verificationTitle}>Pickup Verified</Text>
+                </View>
+                <Text style={styles.verificationLabel}>Verified By</Text>
+                <Text style={styles.verificationValue}>Agent Name: {pickupVerificationAgentName}</Text>
+                <Text style={styles.verificationValue}>Agent ID: {pickupVerificationAgentId}</Text>
+                <Text style={styles.verificationLabel}>Verified At</Text>
+                <Text style={styles.verificationValue}>{formatVerificationTime(pickupVerificationTimestamp)}</Text>
+                <Text style={styles.verificationLabel}>Status</Text>
+                <Text style={styles.verificationValue}>Pickup Successfully Verified</Text>
+              </View>
+            ) : (
+              <View style={styles.verificationPendingCard}>
+                <View style={styles.verificationIconRow}>
+                  <MaterialCommunityIcons name="clock-outline" size={24} color="#B45309" />
+                  <Text style={styles.verificationTitle}>Pickup Verification Pending</Text>
+                </View>
+                <Text style={styles.verificationValue}>Waiting for the assigned agent to complete pickup verification.</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Luggage Verification QR */}
+        {renderSection(
+          'Luggage Verification QR',
+          'qrcode',
+          <View>
+            <View style={styles.qrCard}>
+              <Text style={styles.qrTitle}>Pickup QR</Text>
+              {booking.pickup_qr_image ? (
+                <Image source={{ uri: booking.pickup_qr_image }} style={styles.qrImage} />
+              ) : (
+                <View style={styles.qrPlaceholder}>
+                  <Text style={styles.qrPlaceholderText}>Pickup QR unavailable</Text>
+                </View>
+              )}
+            </View>
+            <View style={[styles.qrCard, styles.qrCardLocked]}>
+              <View style={styles.lockedQrHeader}>
+                <MaterialCommunityIcons name="lock" size={24} color="#F59E0B" />
+                <Text style={styles.qrTitle}>Delivery QR Locked</Text>
+              </View>
+              <Text style={styles.lockedQrText}>
+                This QR code will become available after the assigned agent reaches the destination/airport.
+              </Text>
+              <Text style={styles.lockedQrTextSecondary}>
+                Please wait for the delivery process to progress.
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Additional Instructions */}
         {booking.special_instructions && renderSection(
           'Additional Instructions',
@@ -341,6 +437,120 @@ const styles = StyleSheet.create({
   timelineTime: { fontSize: 12, color: '#999', marginTop: 2 },
   timelineLine: { height: 20, width: 2, marginLeft: 6, backgroundColor: '#E5E7EB', marginVertical: -6 },
   instructionText: { fontSize: 13, color: '#555', lineHeight: 20 },
+  verificationSuccessCard: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#A5D6A7',
+  },
+  verificationPendingCard: {
+    backgroundColor: '#FFF7E6',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FFD59A',
+  },
+  verificationIconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  verificationTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1F2937',
+    marginLeft: 8,
+  },
+  verificationLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B7280',
+    marginTop: 8,
+  },
+  verificationValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginTop: 2,
+  },
+  verificationButton: {
+    marginTop: 12,
+    backgroundColor: '#FF6600',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  verificationButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  qrCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  qrCardLocked: {
+    opacity: 0.9,
+    backgroundColor: '#FFF8E1',
+  },
+  lockedQrHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  lockedQrText: {
+    textAlign: 'center',
+    color: '#92400E',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  lockedQrTextSecondary: {
+    textAlign: 'center',
+    color: '#B45309',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 6,
+  },
+  qrTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  qrImage: {
+    width: 180,
+    height: 180,
+    borderRadius: 14,
+    backgroundColor: '#fff',
+  },
+  qrPlaceholder: {
+    width: 180,
+    height: 180,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#D1D5DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FAFAFA',
+    padding: 16,
+  },
+  qrPlaceholderText: {
+    textAlign: 'center',
+    color: '#6B7280',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   bottomButtonContainer: {
     paddingHorizontal: 16,
     paddingBottom: Platform.OS === 'android' ? 40 : 24,

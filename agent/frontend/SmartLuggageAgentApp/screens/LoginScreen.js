@@ -63,6 +63,7 @@ export default function LoginScreen({ navigation, route }) {
   };
 
   const handleLogin = async () => {
+    console.log('AGENT LOGIN API_URL', API_URL);
     if (mobile.trim() === '' || password.trim() === '') {
       Alert.alert('Validation', 'Please enter mobile number and password.');
       return;
@@ -70,7 +71,9 @@ export default function LoginScreen({ navigation, route }) {
 
     setLoading(true);
     try {
-      const resp = await fetch(`${API_URL}/api/auth/login`, {
+      const requestUrl = `${API_URL}/api/auth/login`;
+      console.log('AGENT LOGIN request', requestUrl, { mobile: mobile.trim() });
+      const resp = await fetch(requestUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mobile: mobile.trim(), password }),

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000';
 
 // Convert DD/MM/YYYY to YYYY-MM-DD format for MySQL
 const convertDateToMySQLFormat = (dateStr) => {

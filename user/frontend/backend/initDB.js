@@ -2,9 +2,6 @@ const db = require("./db");
 
 const initializeDatabase = (callback) => {
   const queries = [
-    // Drop and recreate agent_queue to ensure proper schema
-    `DROP TABLE IF EXISTS agent_queue`,
-    
     // 1. Create Users Table if not exists
     `CREATE TABLE IF NOT EXISTS users (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -46,6 +43,8 @@ const initializeDatabase = (callback) => {
       drop_latitude FLOAT,
       drop_longitude FLOAT,
       photos LONGTEXT,
+      qr_manifest LONGTEXT,
+      destination_qr_unlocked_at TIMESTAMP NULL,
       additional_info TEXT,
       status VARCHAR(20) DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -128,6 +127,16 @@ const initializeDatabase = (callback) => {
     `ALTER TABLE bookings ADD razorpay_payment_id VARCHAR(100)`,
     `ALTER TABLE bookings ADD amount DECIMAL(10, 2)`,
     `ALTER TABLE bookings ADD payment_method VARCHAR(50)`,
+    `ALTER TABLE bookings ADD qr_manifest LONGTEXT`,
+    `ALTER TABLE bookings ADD destination_qr_unlocked_at TIMESTAMP NULL`,
+    
+    // Add QR verification tracking columns
+    `ALTER TABLE bookings ADD pickup_verified TINYINT DEFAULT 0`,
+    `ALTER TABLE bookings ADD pickup_verified_at TIMESTAMP NULL`,
+    `ALTER TABLE bookings ADD pickup_verified_by_agent_id INT NULL`,
+    `ALTER TABLE bookings ADD pickup_verified_by_agent_name VARCHAR(160) NULL`,
+    `ALTER TABLE bookings ADD delivery_verified_at TIMESTAMP NULL`,
+    `ALTER TABLE bookings ADD delivery_verified_by_agent_id INT NULL`,
     
     // 6. Add assignment tracking columns to bookings table
     `ALTER TABLE bookings ADD assignment_due_at DATETIME`,

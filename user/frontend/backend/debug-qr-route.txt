@@ -1,0 +1,56 @@
+// Debug endpoint to help diagnose QR scanning issues
+router.post("/debug-verify-qr/:bookingId", async (req, res) => {
+  const { bookingId } = req.params;
+  const qrValue = req.body?.qrValue;
+
+  console.log('\n\n🔍 DEBUG QR VERIFICATION');
+  console.log('=====================================');
+  console.log('Booking ID:', bookingId);
+  console.log('Raw QR Value Type:', typeof qrValue);
+  console.log('Raw QR Value Length:', qrValue?.length);
+  console.log('Raw QR Value:', qrValue);
+  console.log('Raw QR Value (hex):', Buffer.from(qrValue || '').toString('hex'));
+  console.log('=====================================');
+
+  try {
+    // Try to parse as JSON
+    const parsed = JSON.parse(qrValue);
+    console.log('✅ Parsed as JSON successfully');
+    console.log('   Keys:', Object.keys(parsed));
+    console.log('   Booking ID in payload:', parsed.bookingId);
+    console.log('   Phase/Type:', parsed.phase);
+    console.log('   Has signature:', !!parsed.signature);
+    
+    // Try verification
+    const rows = await runQuery('SELECT * FROM bookings WHERE id = ? LIMIT 1', [bookingId]);
+    if (rows.length) {
+      const verification = verifyQrPayload({
+        bookingId,
+        qrType: parsed.phase || 'pickup',
+        qrValue,
+        manifest: rows[0].qr_manifest,
+        bookingRow: rows[0],
+      });
+      
+      res.json({
+        success: true,
+        debug: {
+          payloadType: 'json',
+          verified: verification.ok,
+          message: verification.message,
+          bookingIdMatch: parsed.bookingId === Number(bookingId),
+        }
+      });
+    }
+  } catch (error) {
+    console.log('❌ Not valid JSON:', error.message);
+    res.json({
+      success: true,
+      debug: {
+        payloadType: 'not-json',
+        error: error.message,
+        length: qrValue?.length
+      }
+    });
+  }
+});

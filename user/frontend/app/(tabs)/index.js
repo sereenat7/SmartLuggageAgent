@@ -22,7 +22,7 @@ export default function Home() {
   const [userPhone, setUserPhone] = useState("");
 
   const displayInitial = displayName.charAt(0).toUpperCase();
-  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/bookings`;
+  const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/bookings`;
 
   // Fetch latest booking
   const fetchLatestBooking = async () => {

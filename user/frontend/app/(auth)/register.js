@@ -21,12 +21,10 @@ export default function RegisterScreen() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [confirm, setConfirm] = useState("");
+    const BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.110.169.52:5000'}/api/auth`;
 
     const [errors, setErrors] = useState({});
     const [focus, setFocus] = useState("");
-
-    // Backend connection URL from .env file
-    const BASE_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/auth`;
 
     const handleRegister = async () => {
         let newErrors = {};
@@ -47,7 +45,14 @@ export default function RegisterScreen() {
             Keyboard.dismiss();
 
             try {
-                const response = await fetch(`${BASE_URL}/register`, {
+                const requestUrl = `${BASE_URL}/register`;
+                console.log('USER REGISTER request', requestUrl, {
+                    name: name.trim(),
+                    phone: "+91" + phone,
+                    email: email.trim()
+                });
+
+                const response = await fetch(requestUrl, {
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json"
@@ -78,8 +83,8 @@ export default function RegisterScreen() {
                     Alert.alert("Registration Failed", data.message || "Something went wrong");
                 }
             } catch (error) {
-                console.error("Register Error:", error);
-                Alert.alert("Server Error", "Unable to connect to the server. Check your IP and connection.");
+                console.error("USER REGISTER fetch error:", error);
+                Alert.alert("Server Error", `Unable to connect to the server. Check your IP and connection.\n${error.message}`);
             }
         }
     };

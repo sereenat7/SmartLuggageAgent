@@ -31,7 +31,8 @@ export default function FlightDetails() {
   
   const [depDate, setDepDate] = useState(new Date());
   const [depTime, setDepTime] = useState(new Date());
-  const [showPicker, setShowPicker] = useState(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchType, setSearchType] = useState('dep'); 
@@ -105,10 +106,13 @@ export default function FlightDetails() {
   };
 
   const onPickerChange = (event, selectedValue) => {
-    if (Platform.OS === 'android') setShowPicker(null);
     if (selectedValue) {
-        if (showPicker === 'depDate') setDepDate(selectedValue);
-        if (showPicker === 'depTime') setDepTime(selectedValue);
+        if (showDatePicker) setDepDate(selectedValue);
+        if (showTimePicker) setDepTime(selectedValue);
+    }
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+      setShowTimePicker(false);
     }
   };
 
@@ -269,25 +273,15 @@ export default function FlightDetails() {
         
         <Text style={styles.inputLabel}>Departure Date and Time</Text>
         <View style={styles.sideBySideRow}>
-            <TouchableOpacity style={styles.dateBox} onPress={() => setShowPicker('depDate')}>
+            <TouchableOpacity style={styles.dateBox} onPress={() => setShowDatePicker(true)}>
               <MaterialCommunityIcons name="calendar-month" size={18} color="#FF4B2B" />
               <Text style={styles.dateTimeValText}>{depDate.toLocaleDateString('en-GB')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.timeBox} onPress={() => setShowPicker('depTime')}>
+            <TouchableOpacity style={styles.timeBox} onPress={() => setShowTimePicker(true)}>
               <MaterialCommunityIcons name="clock-outline" size={18} color="#FF4B2B" />
               <Text style={styles.dateTimeValText}>{depTime.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12: true})}</Text>
             </TouchableOpacity>
         </View>
-
-        {showPicker && (
-          <DateTimePicker 
-            value={new Date()} 
-            mode={showPicker.includes('Time') ? 'time' : 'date'} 
-            display="spinner" 
-            is24Hour={false} 
-            onChange={onPickerChange} 
-          />
-        )}
 
         <TouchableOpacity style={styles.continueBtn} onPress={handleContinue}>
             <LinearGradient colors={['#FF4B2B', '#FF8C00']} style={styles.gradientBtn}>
@@ -330,6 +324,33 @@ export default function FlightDetails() {
             )} />
         </View>
       </Modal>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={depDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(event, selectedDate) => {
+            if (selectedDate) setDepDate(selectedDate);
+            if (Platform.OS === 'android') setShowDatePicker(false);
+          }}
+          minimumDate={new Date()}
+          maximumDate={new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)}
+        />
+      )}
+
+      {showTimePicker && (
+        <DateTimePicker
+          value={depTime}
+          mode="time"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={(event, selectedTime) => {
+            if (selectedTime) setDepTime(selectedTime);
+            if (Platform.OS === 'android') setShowTimePicker(false);
+          }}
+          is24Hour={false}
+        />
+      )}
     </View>
   );
 }
@@ -393,5 +414,16 @@ const styles = StyleSheet.create({
   cancelText: { marginLeft: 15, color: '#FF4B2B', fontWeight: '700' },
   resItem: { padding: 20, borderBottomWidth: 1, borderBottomColor: '#F5F7FA' },
   resCity: { fontSize: 16, fontWeight: '700', color: '#333' },
-  resAir: { fontSize: 12, color: '#999' }
+  resAir: { fontSize: 12, color: '#999' },
+  pickerModal: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFF', paddingVertical: 16, paddingHorizontal: 20, borderTopWidth: 1, borderTopColor: '#EEE' },
+  pickerTitle: { fontSize: 16, fontWeight: '700', color: '#333' },
+  pickerCancel: { fontSize: 14, color: '#999', fontWeight: '600' },
+  pickerConfirm: { fontSize: 14, color: '#FF4B2B', fontWeight: '700' },
+  dateItem: { paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F5F7FA', backgroundColor: '#FFF' },
+  dateText: { fontSize: 15, color: '#333', fontWeight: '500' },
+  dateTextSelected: { color: '#FF4B2B', fontWeight: '700' },
+  timeItem: { paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F5F7FA', backgroundColor: '#FFF' },
+  timeText: { fontSize: 16, color: '#333', fontWeight: '500' },
+  timeTextSelected: { color: '#FF4B2B', fontWeight: '700' }
 });

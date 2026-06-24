@@ -225,6 +225,8 @@ export default function DashboardScreen({ navigation, route }) {
       await fetchInbox();
 
       if (action === 'accept') {
+        setActiveTab('In Progress');
+
         const acceptedSession = {
           sessionId: data?.session?.sessionId || `queue-${request.queueId}`,
           bookingId: data?.session?.bookingId || request?.bookingId || null,

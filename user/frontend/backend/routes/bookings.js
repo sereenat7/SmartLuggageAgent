@@ -3,6 +3,8 @@ const { latLngToCell, gridDistance } = require("h3-js");
 const router = express.Router();
 const db = require("../db");
 const { computeAgentSchedule } = require("../utils/agentSchedule");
+const { attachQrDataToBooking, createBookingQrManifest, verifyQrPayload, isDestinationUnlocked } = require("../utils/bookingQr");
+const { getVerificationStatus, formatBookingForVerification, createVerificationLog } = require("../utils/verificationService");
 
 const H3_RESOLUTION = 8;
 const AGENT_STALE_MINUTES = 15;
@@ -45,12 +47,25 @@ const haversineKm = (lat1, lon1, lat2, lon2) => {
 const formatDate = (date) => {
   if (!date) return null;
   if (typeof date === 'string') {
+    date = date.trim();
     // If already in YYYY-MM-DD format, return as is
     if (date.match(/^\d{4}-\d{2}-\d{2}$/)) return date;
+    
+    // Handle DD/MM/YYYY format (from frontend)
+    if (date.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+      const parts = date.split('/');
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2];
+      return `${year}-${month}-${day}`;
+    }
+    
     // Try to parse and reformat
     try {
       const d = new Date(date);
-      return d.toISOString().split('T')[0];
+      if (!isNaN(d.getTime())) {
+        return d.toISOString().split('T')[0];
+      }
     } catch (e) {
       return null;
     }
@@ -70,6 +85,14 @@ const getBookingStatus = (status) => {
   if (s === 'in_transit' || s === 'in transit') return 'in transit';
   return s;
 };
+
+const runQuery = (sql, params = []) =>
+  new Promise((resolve, reject) => {
+    db.query(sql, params, (err, results) => {
+      if (err) return reject(err);
+      resolve(results);
+    });
+  });
 
 // Helper function to format times as HH:MM:SS
 const formatTime = (time) => {
@@ -237,188 +260,90 @@ const logBookingH3Scenarios = ({ bookingId, userH3, rankedCandidates }) => {
 
 const queueBookingForAgentDashboard = (bookingId, phone) =>
   new Promise((resolve, reject) => {
-    const phoneVariants = getPhoneVariants(phone);
-    if (!phoneVariants.length) {
-      return resolve({ queued: false, reason: "missing-phone" });
-    }
-
-    const placeholders = phoneVariants.map(() => "?").join(",");
-    const userSql = `SELECT id FROM users WHERE phone IN (${placeholders}) LIMIT 1`;
-
-    db.query(userSql, phoneVariants, (userErr, users) => {
-      if (userErr) return reject(userErr);
-      const userId = users?.[0]?.id;
-      if (!userId) {
-        return resolve({ queued: false, reason: "user-not-found" });
+    try {
+      console.log(`[QUEUE] Attempting to queue booking ${bookingId} for phone: ${phone}`);
+      
+      const phoneVariants = getPhoneVariants(phone);
+      if (!phoneVariants.length) {
+        console.log(`[QUEUE] ❌ No phone variants found`);
+        return resolve({ queued: false, reason: "missing-phone" });
       }
 
-      const bestAgentSql = `
-        SELECT b.id, b.pickup_latitude, b.pickup_longitude, b.bag_weight,
-               b.departure_date, b.pickup_time,
-               a.agent_id, a.name, a.latitude, a.longitude, a.h3_index, a.vehicle_type, a.max_weight_kg,
-               a.location_updated_at
-        FROM bookings b
-        LEFT JOIN support_agents a ON a.status = 'available'
-          AND a.latitude IS NOT NULL
-          AND a.longitude IS NOT NULL
-        WHERE b.id = ?
-      `;
+      const placeholders = phoneVariants.map(() => "?").join(",");
+      const userSql = `SELECT id FROM users WHERE phone IN (${placeholders}) LIMIT 1`;
 
-      db.query(bestAgentSql, [bookingId], (bestErr, rows) => {
-        if (bestErr) return reject(bestErr);
-
-        const booking = rows?.[0];
-        const userLat = toNumberOrNull(booking?.pickup_latitude);
-        const userLng = toNumberOrNull(booking?.pickup_longitude);
-        const requiredWeightKg = parseWeightKg(booking?.bag_weight);
-
-        let preferredAgentId = null;
-        if (booking && userLat !== null && userLng !== null) {
-          const userH3 = latLngToCell(userLat, userLng, H3_RESOLUTION);
-          let bestScore = Number.POSITIVE_INFINITY;
-          const rankedCandidates = [];
-
-          for (const row of rows) {
-            if (!row?.agent_id) continue;
-
-            const aLat = toNumberOrNull(row.latitude);
-            const aLng = toNumberOrNull(row.longitude);
-            if (aLat === null || aLng === null) continue;
-
-            const maxWeightKg = resolveAgentCapacityKg(row);
-            if (Number.isFinite(requiredWeightKg) && Number.isFinite(maxWeightKg) && requiredWeightKg > maxWeightKg) {
-              continue;
-            }
-
-            let h3Distance = 8;
-            let agentH3 = null;
-            try {
-              agentH3 = row.h3_index || latLngToCell(aLat, aLng, H3_RESOLUTION);
-              h3Distance = gridDistance(userH3, agentH3);
-            } catch (_e) {
-              h3Distance = 8;
-              agentH3 = null;
-            }
-
-            const distanceKm = haversineKm(userLat, userLng, aLat, aLng);
-            let freshnessPenalty = 1200;
-            if (row.location_updated_at) {
-              const minutesSinceUpdate = Math.max(
-                0,
-                (Date.now() - new Date(row.location_updated_at).getTime()) / 60000
-              );
-
-              freshnessPenalty = minutesSinceUpdate <= AGENT_STALE_MINUTES
-                ? minutesSinceUpdate * 0.1
-                : 1000 + (minutesSinceUpdate - AGENT_STALE_MINUTES);
-            }
-
-            const score = distanceKm + Number(h3Distance || 0) * 0.8 + freshnessPenalty;
-
-            rankedCandidates.push({
-              agentId: Number(row.agent_id),
-              name: row.name || 'Agent',
-              agentH3,
-              h3Distance,
-              distanceKm: Number(distanceKm.toFixed(3)),
-              score: Number(score.toFixed(3)),
-              vehicleType: row.vehicle_type || null,
-              maxWeightKg,
-            });
-
-            if (score < bestScore) {
-              bestScore = score;
-              preferredAgentId = Number(row.agent_id);
-            }
-          }
-
-          rankedCandidates.sort((a, b) => a.score - b.score);
-          logBookingH3Scenarios({
-            bookingId,
-            userH3,
-            rankedCandidates,
-          });
-
-          const bestCandidate = rankedCandidates[0] || null;
-          const bestAgentRow = bestCandidate
-            ? rows.find((row) => Number(row.agent_id) === Number(bestCandidate.agentId))
-            : null;
-
-          if (bestCandidate && bestAgentRow) {
-            const schedule = computeAgentSchedule({
-              pickupLatitude: userLat,
-              pickupLongitude: userLng,
-              agentLatitude: toNumberOrNull(bestAgentRow.latitude),
-              agentLongitude: toNumberOrNull(bestAgentRow.longitude),
-              departureDate: booking.departure_date,
-              pickupTime: booking.pickup_time,
-              agentH3Index: bestAgentRow.h3_index,
-            });
-
-            const pickupAtSql = schedule.pickupAt
-              ? schedule.pickupAt.toISOString().slice(0, 19).replace("T", " ")
-              : null;
-            const leaveBySql = schedule.leaveByAt
-              ? schedule.leaveByAt.toISOString().slice(0, 19).replace("T", " ")
-              : null;
-
-            db.query(
-              `UPDATE bookings
-               SET assigned_agent_id = ?,
-                   assignment_due_at = COALESCE(?, assignment_due_at),
-                   agent_eta_minutes = ?,
-                   agent_leave_by_at = ?,
-                   pickup_h3_index = ?,
-                   assignment_status = 'queued'
-               WHERE id = ?`,
-              [
-                preferredAgentId,
-                pickupAtSql,
-                schedule.travelEtaMinutes,
-                leaveBySql,
-                schedule.userH3,
-                bookingId,
-              ],
-              (scheduleErr) => {
-                if (scheduleErr) {
-                  console.error("[H3] Failed to persist schedule on booking:", scheduleErr.message);
-                } else {
-                  console.log(
-                    `[H3] Booking ${bookingId}: travelEta=${schedule.travelEtaMinutes}min ` +
-                    `leaveBy=${leaveBySql || "n/a"} pickupAt=${pickupAtSql || "n/a"} ` +
-                    `h3Distance=${schedule.h3Distance} userH3=${schedule.userH3}`
-                  );
-                }
-              }
-            );
-          }
+      db.query(userSql, phoneVariants, (userErr, users) => {
+        if (userErr) {
+          console.error(`[QUEUE] ❌ User lookup error:`, userErr.message);
+          return reject(userErr);
+        }
+        
+        const userId = users?.[0]?.id;
+        if (!userId) {
+          console.log(`[QUEUE] ⚠️ User not found for phone: ${phone}`);
+          // Create a fallback: use null user_id but still queue the booking
+          return queueWithAgent(null);
         }
 
-      const queueSql = `
-        INSERT INTO agent_queue (user_id, booking_id, preferred_agent_id, status)
-        VALUES (?, ?, ?, 'waiting')
-        ON DUPLICATE KEY UPDATE
-          booking_id = VALUES(booking_id),
-          preferred_agent_id = VALUES(preferred_agent_id),
-          declined_agent_ids = NULL,
-          status = 'waiting',
-          updated_at = CURRENT_TIMESTAMP
-      `;
+        queueWithAgent(userId);
+      });
 
-      db.query(queueSql, [userId, bookingId, preferredAgentId], (queueErr) => {
-        if (queueErr) return reject(queueErr);
+      function queueWithAgent(userId) {
+        // Get first available agent
+        const agentSql = `
+          SELECT agent_id FROM support_agents 
+          WHERE status = 'available' 
+          ORDER BY location_updated_at DESC 
+          LIMIT 1
+        `;
 
-        db.query(
-          `UPDATE bookings SET status = 'queued', assignment_status = 'queued' WHERE id = ?`,
-          [bookingId],
-          (bookingErr) => {
-            if (bookingErr) return reject(bookingErr);
-            resolve({ queued: true, userId, preferredAgentId });
+        db.query(agentSql, (agentErr, agents) => {
+          if (agentErr) {
+            console.error(`[QUEUE] ❌ Agent lookup error:`, agentErr.message);
+            return reject(agentErr);
           }
-        );
-      });
-      });
-    });
+
+          const preferredAgentId = agents?.[0]?.agent_id || null;
+          console.log(`[QUEUE] Using Agent #${preferredAgentId || 'UNASSIGNED'}`);
+
+          // Insert into agent_queue (SIMPLE AND RELIABLE)
+          const queueSql = `
+            INSERT INTO agent_queue (user_id, booking_id, preferred_agent_id, status, requested_at)
+            VALUES (?, ?, ?, 'waiting', CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE
+              preferred_agent_id = VALUES(preferred_agent_id),
+              status = 'waiting',
+              requested_at = CURRENT_TIMESTAMP,
+              updated_at = CURRENT_TIMESTAMP
+          `;
+
+          db.query(queueSql, [userId, bookingId, preferredAgentId], (queueErr) => {
+            if (queueErr) {
+              console.error(`[QUEUE] ❌ Failed to insert into agent_queue:`, queueErr.message);
+              return reject(queueErr);
+            }
+
+            console.log(`[QUEUE] ✅ Booking ${bookingId} queued successfully`);
+
+            // Update booking status (if not already queued)
+            db.query(
+              `UPDATE bookings SET status = 'queued', assignment_status = 'queued' WHERE id = ? AND status != 'queued'`,
+              [bookingId],
+              (bookingErr) => {
+                if (bookingErr) {
+                  console.error(`[QUEUE] ⚠️ Failed to update booking status:`, bookingErr.message);
+                  // Still resolve because agent_queue insertion succeeded
+                }
+                resolve({ queued: true, userId, preferredAgentId });
+              }
+            );
+          });
+        });
+      }
+    } catch (error) {
+      console.error(`[QUEUE] ❌ Unexpected error:`, error.message);
+      reject(error);
+    }
   });
 
 // Middleware to verify token
@@ -500,8 +425,8 @@ router.post("/create", verifyToken, (req, res) => {
         bag_count, bag_weight, is_fragile, is_checkin, pincode, 
         pickup_address, pickup_latitude, pickup_longitude, pickup_time,
         drop_address, drop_latitude, drop_longitude,
-        photos, additional_info, assignment_due_at, assignment_status, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        photos, qr_manifest, additional_info, assignment_due_at, assignment_status, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     db.query(
@@ -535,6 +460,7 @@ router.post("/create", verifyToken, (req, res) => {
         dropLatitude,
         dropLongitude,
         photos ? JSON.stringify(photos) : null, 
+        null,
         additionalInfo, 
         assignmentDueAt,
         'scheduled',
@@ -547,6 +473,16 @@ router.post("/create", verifyToken, (req, res) => {
         }
 
         console.log('DEBUG: Booking created successfully - ID:', result.insertId, 'for phone:', req.phone);
+
+        db.query(
+          "UPDATE bookings SET qr_manifest = ? WHERE id = ?",
+          [JSON.stringify(createBookingQrManifest(result.insertId)), result.insertId],
+          (qrErr) => {
+            if (qrErr) {
+              console.error('DEBUG: Failed to persist QR manifest:', qrErr.message);
+            }
+          }
+        );
 
         let queuedNow = false;
         try {
@@ -780,7 +716,7 @@ router.get("/:bookingId", verifyToken, (req, res) => {
   const placeholders = phonesToTry.map(() => '?').join(' OR phone = ');
   const query = `SELECT * FROM bookings WHERE id = ? AND (phone = ${placeholders})`;
   
-  db.query(query, [bookingId, ...phonesToTry], (err, results) => {
+  db.query(query, [bookingId, ...phonesToTry], async (err, results) => {
     if (err) {
       return res.json({ success: false, message: "DB Error", error: err });
     }
@@ -793,7 +729,14 @@ router.get("/:bookingId", verifyToken, (req, res) => {
       ...results[0],
       booking_status: getBookingStatus(results[0].status),
     };
-    res.json({ success: true, booking: bookingData });
+
+    try {
+      const bookingWithQr = await attachQrDataToBooking(bookingData);
+      res.json({ success: true, booking: bookingWithQr });
+    } catch (qrErr) {
+      console.error('DEBUG: Failed to attach QR data:', qrErr);
+      res.json({ success: true, booking: bookingData });
+    }
   });
 });
 
@@ -892,6 +835,259 @@ router.patch("/delivered/:bookingId", (req, res) => {
       });
     });
   });
+});
+
+// DEBUG endpoint to see what camera is sending
+router.post("/debug-qr/:bookingId", async (req, res) => {
+  const { bookingId } = req.params;
+  const qrValue = req.body?.qrValue;
+
+  console.log('\n\n🔍 DEBUG-QR ENDPOINT');
+  console.log('Raw QR Value:', qrValue);
+  console.log('QR Value Type:', typeof qrValue);
+  console.log('QR Value Length:', qrValue?.length);
+  
+  try {
+    const parsed = JSON.parse(qrValue);
+    console.log('✅ Successfully parsed as JSON');
+    console.log('   Booking ID:', parsed.bookingId);
+    console.log('   Phase:', parsed.phase);
+    res.json({ success: true, debug: 'Valid JSON payload', parsed });
+  } catch (e) {
+    console.log('❌ NOT valid JSON:', e.message);
+    res.json({ success: false, debug: 'Invalid JSON', error: e.message });
+  }
+});
+
+router.post("/verify-qr/:bookingId", async (req, res) => {
+  const { bookingId } = req.params;
+  const qrType = String(req.body?.qrType || '').trim().toLowerCase();
+  const qrValue = req.body?.qrValue;
+
+  console.log('\n\n╔════════════════════════════════════════════╗');
+  console.log('║   QR VERIFICATION ENDPOINT RECEIVED        ║');
+  console.log('╚════════════════════════════════════════════╝');
+  console.log('Booking ID:', bookingId);
+  console.log('QR Type:', qrType);
+  console.log('QR Value preview:', qrValue?.substring(0, 50) + '...' || 'MISSING');
+
+  if (!['pickup', 'destination'].includes(qrType)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid QR type',
+      verificationStatus: {
+        status: 'invalid',
+        reason: 'Invalid QR type',
+        message: 'The scanned QR code type is not valid for this booking',
+      },
+    });
+  }
+
+  try {
+    const rows = await runQuery('SELECT * FROM bookings WHERE id = ? LIMIT 1', [bookingId]);
+    if (!rows.length) {
+      console.log('❌ Booking not found');
+      return res.status(404).json({
+        success: false,
+        verificationStatus: { status: 'invalid', reason: 'QR does not exist' },
+      });
+    }
+
+    console.log('✅ Booking found');
+    console.log('   Status:', rows[0].status);
+    console.log('   Has qr_manifest:', !!rows[0].qr_manifest);
+
+    const booking = rows[0];
+    const verification = verifyQrPayload({
+      bookingId,
+      qrType,
+      qrValue,
+      manifest: booking.qr_manifest,
+      bookingRow: booking,
+    });
+
+    if (!verification.ok) {
+      // Return verification failure details
+      let verificationStatus;
+      if (verification.message.includes('locked')) {
+        verificationStatus = {
+          status: 'locked',
+          reason: 'Agent has not arrived',
+          message: verification.message,
+        };
+      } else if (verification.message.includes('does not belong')) {
+        verificationStatus = {
+          status: 'invalid',
+          reason: 'QR mismatch',
+          message: verification.message,
+        };
+      } else if (verification.message.includes('signature')) {
+        verificationStatus = {
+          status: 'invalid',
+          reason: 'Invalid signature',
+          message: 'QR code appears to be tampered or expired',
+        };
+      } else {
+        verificationStatus = {
+          status: 'invalid',
+          reason: 'Verification failed',
+          message: verification.message,
+        };
+      }
+
+      return res.status(400).json({
+        success: false,
+        verificationStatus,
+      });
+    }
+
+    // Get comprehensive verification status
+    const verificationStatus = getVerificationStatus(booking, qrType);
+    const bookingDetails = formatBookingForVerification(booking, qrType);
+
+    console.log('✅ QR VERIFICATION SUCCESSFUL');
+    console.log('   Status:', verificationStatus.status);
+    console.log('   Booking Details returned');
+
+    return res.json({
+      success: true,
+      verificationStatus,
+      booking: bookingDetails,
+      bookingId,
+      qrType,
+      message: 'QR verified - awaiting confirmation',
+    });
+  } catch (error) {
+    console.error('❌ verify-qr error:', error);
+    console.error('Stack:', error.stack);
+    return res.status(500).json({
+      success: false,
+      verificationStatus: { status: 'error', message: 'Verification service error' },
+      error: error.message,
+    });
+  }
+});
+
+// New endpoint: Confirm QR verification after agent reviews details
+router.post("/confirm-qr-verification/:bookingId", async (req, res) => {
+  const { bookingId } = req.params;
+  const { qrType, agentId, agentName } = req.body;
+
+  if (!['pickup', 'destination'].includes(qrType)) {
+    return res.status(400).json({ success: false, message: 'Invalid QR type' });
+  }
+
+  try {
+    const rows = await runQuery('SELECT * FROM bookings WHERE id = ? LIMIT 1', [bookingId]);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const booking = rows[0];
+
+    if (qrType === 'pickup') {
+      // Check if already verified
+      if (booking.pickup_verified_at) {
+        return res.status(400).json({
+          success: false,
+          message: 'Pickup already verified for this booking',
+          previousVerification: {
+            verifiedAt: booking.pickup_verified_at,
+            agentId: booking.pickup_verified_by_agent_id,
+          },
+        });
+      }
+
+      // Update booking with pickup verification
+      await runQuery(
+        `UPDATE bookings SET
+          status = 'picked_up',
+          assignment_status = 'picked_up',
+          pickup_verified = 1,
+          pickup_verified_at = CURRENT_TIMESTAMP,
+          pickup_verified_by_agent_id = ?,
+          pickup_verified_by_agent_name = ?
+         WHERE id = ?`,
+        [agentId, agentName || null, bookingId]
+      );
+    } else {
+      // Destination verification
+      // Check if destination is unlocked
+      if (!booking.destination_qr_unlocked_at) {
+        return res.status(400).json({
+          success: false,
+          message: 'Destination QR is still locked',
+        });
+      }
+
+      // Check if already verified
+      if (booking.delivery_verified_at) {
+        return res.status(400).json({
+          success: false,
+          message: 'Delivery already verified for this booking',
+          previousVerification: {
+            verifiedAt: booking.delivery_verified_at,
+            agentId: booking.delivery_verified_by_agent_id,
+          },
+        });
+      }
+
+      // Update booking with delivery verification
+      await runQuery(
+        `UPDATE bookings SET
+          status = 'delivered',
+          assignment_status = 'delivered',
+          delivery_verified_at = CURRENT_TIMESTAMP,
+          delivery_verified_by_agent_id = ?
+         WHERE id = ?`,
+        [agentId, bookingId]
+      );
+
+      // Close active agent session
+      const sessions = await runQuery(
+        "SELECT session_id, agent_id FROM agent_sessions WHERE booking_id = ? AND status = 'active' LIMIT 1",
+        [bookingId]
+      );
+      if (sessions.length) {
+        const { session_id, agent_id } = sessions[0];
+        await runQuery(
+          "UPDATE agent_sessions SET status = 'completed', end_time = CURRENT_TIMESTAMP WHERE session_id = ?",
+          [session_id]
+        );
+        await runQuery(
+          "UPDATE support_agents SET status = 'available', current_user_id = NULL WHERE agent_id = ?",
+          [agent_id]
+        );
+      }
+    }
+
+    // Fetch updated booking
+    const updatedRows = await runQuery('SELECT * FROM bookings WHERE id = ? LIMIT 1', [bookingId]);
+    const updatedBooking = updatedRows[0];
+
+    return res.json({
+      success: true,
+      message: qrType === 'pickup' ? 'Pickup verified successfully' : 'Delivery verified successfully',
+      booking: {
+        id: updatedBooking.id,
+        status: updatedBooking.status,
+        pickupVerified: Boolean(updatedBooking.pickup_verified),
+        pickupVerifiedAt: updatedBooking.pickup_verified_at,
+        pickupVerifiedByAgentId: updatedBooking.pickup_verified_by_agent_id,
+        pickupVerifiedByAgentName: updatedBooking.pickup_verified_by_agent_name,
+        verifiedAt: qrType === 'pickup' ? updatedBooking.pickup_verified_at : updatedBooking.delivery_verified_at,
+        verifiedByAgentId: qrType === 'pickup' ? updatedBooking.pickup_verified_by_agent_id : updatedBooking.delivery_verified_by_agent_id,
+        verifiedByAgentName: agentName,
+      },
+    });
+  } catch (error) {
+    console.error('confirm-qr-verification error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to confirm verification',
+      error: error.message,
+    });
+  }
 });
 
 module.exports = router;

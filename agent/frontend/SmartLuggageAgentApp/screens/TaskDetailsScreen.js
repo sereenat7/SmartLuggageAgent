@@ -36,6 +36,8 @@ export default function TaskDetailsScreen({ navigation, route }) {
   const [previewImageUri, setPreviewImageUri] = useState('');
   const [weight, setWeight] = useState(booking?.bag_weight ? String(booking.bag_weight) : '');
   const [pickupConfirmed, setPickupConfirmed] = useState(false);
+  const [showVerificationDetails, setShowVerificationDetails] = useState(false);
+  const [pickupVerificationDetails, setPickupVerificationDetails] = useState(route?.params?.pickupVerificationDetails || null);
   
   // OTP fields
   const [otp, setOtp] = useState(Array(4).fill(''));
@@ -92,11 +94,31 @@ export default function TaskDetailsScreen({ navigation, route }) {
   const normalizeStatus = (value) => String(value || '').trim().toLowerCase();
   const isOnTheWay = normalizeStatus(currentStatus) === 'on-the-way' || normalizeStatus(currentStatus) === 'on_the_way' || normalizeStatus(currentStatus) === 'picked_up';
 
+  const formatVerifiedAt = (dateStr) => {
+    if (!dateStr) return 'Just now';
+    if (dateStr === 'Just now') return 'Just now';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      return date.toLocaleString();
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
   useEffect(() => {
+    const verifiedFromRoute = Boolean(route?.params?.pickupVerified || route?.params?.pickupVerificationDetails);
+    if (verifiedFromRoute) {
+      setPickupConfirmed(true);
+      setPickupVerificationDetails(route?.params?.pickupVerificationDetails || null);
+      setCurrentStatus('picked_up');
+      return;
+    }
+
     if (normalizeStatus(booking?.status) === 'on-the-way' || normalizeStatus(booking?.status) === 'on_the_way' || normalizeStatus(booking?.status) === 'picked_up') {
       setPickupConfirmed(true);
     }
-  }, [booking?.status]);
+  }, [booking?.status, route?.params?.pickupVerified, route?.params?.pickupVerificationDetails]);
 
   // Resend OTP timer
   useEffect(() => {
@@ -179,7 +201,14 @@ export default function TaskDetailsScreen({ navigation, route }) {
   };
 
   const handleConfirmPickup = () => {
-    handleStatusUpdate('on-the-way');
+    navigation.navigate('QrScanner', {
+      bookingId,
+      qrType: 'pickup',
+      bookingTitle: 'Scan Pickup QR',
+      agentId: booking?.agentId || booking?.agent_id || 0,
+      agentName: booking?.agentName || booking?.username || booking?.name || 'Agent',
+      task: booking,
+    });
   };
 
   const handleOtpChange = (value, index) => {
@@ -313,11 +342,14 @@ export default function TaskDetailsScreen({ navigation, route }) {
   };
 
   const handleCompleteDelivery = () => {
-    Alert.alert(
-      'Complete Delivery',
-      'Verify OTP from customer to complete delivery.',
-      [{ text: 'OK', style: 'cancel' }]
-    );
+    navigation.navigate('QrScanner', {
+      bookingId,
+      qrType: 'destination',
+      bookingTitle: 'Scan Destination QR',
+      agentId: booking?.agentId || booking?.agent_id || 0,
+      agentName: booking?.agentName || booking?.username || booking?.name || 'Agent',
+      task: booking,
+    });
   };
 
   const getStatusColor = (status) => {
@@ -527,23 +559,25 @@ export default function TaskDetailsScreen({ navigation, route }) {
                   onPress={handleConfirmPickup}
                   disabled={isProcessing}
                 >
-                  {isProcessing ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="checkmark-circle" size={18} color="#fff" />
-                      <Text style={styles.actionButtonText}>Pickup Confirmed</Text>
-                    </>
-                  )}
+                  <>
+                    <Ionicons name="qr-code-outline" size={18} color="#fff" />
+                    <Text style={styles.actionButtonText}>Scan Pickup QR</Text>
+                  </>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity
-                  style={[styles.actionButton, styles.completedButton]}
-                  onPress={() => navigation.navigate('Dashboard', { activeTab: 'Completed', refreshInbox: true })}
-                >
-                  <Ionicons name="checkmark-done-circle" size={18} color="#fff" />
-                  <Text style={styles.actionButtonText}>Go to Completed Tasks</Text>
-                </TouchableOpacity>
+                <View style={styles.verificationSuccessContainer}>
+                  <View style={styles.verificationSuccessRow}>
+                    <Ionicons name="checkmark-circle" size={20} color="#16A34A" />
+                    <Text style={styles.verificationSuccessTitle}>Pickup successfully verified</Text>
+                  </View>
+                  <Text style={styles.verificationSuccessText}>
+                    Verified at: {formatVerifiedAt(
+                      pickupVerificationDetails?.verifiedAt || 
+                      booking?.pickupVerifiedAt || 
+                      booking?.pickup_verified_at
+                    )}
+                  </Text>
+                </View>
               )}
             </View>
 
@@ -726,6 +760,60 @@ const styles = StyleSheet.create({
   deliveryButton: { backgroundColor: '#DC2626' },
   completedButton: { backgroundColor: '#4CAF50', opacity: 0.7 },
   actionButtonText: { color: '#fff', fontWeight: '700', marginLeft: 8, fontSize: 14 },
+  verificationSuccessContainer: {
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    backgroundColor: '#F0FDF4',
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+  },
+  verificationSuccessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  verificationSuccessTitle: {
+    color: '#166534',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  verificationSuccessText: {
+    color: '#4B5563',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  detailsButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#DCFCE7',
+  },
+  detailsButtonText: {
+    color: '#166534',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  verificationDetailsCard: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+  },
+  verificationDetailsTitle: {
+    color: '#14532D',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  verificationDetailText: {
+    color: '#374151',
+    fontSize: 12,
+    lineHeight: 17,
+  },
   photoDescription: { fontSize: 12, color: '#64748B', marginBottom: 12 },
   photoGrid: {
     flexDirection: 'row',
