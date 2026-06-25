@@ -234,3 +234,4 @@ const styles = StyleSheet.create({
   },
   hintText: { fontSize: 10, color: '#64748B', textAlign: 'center' },
 });
+

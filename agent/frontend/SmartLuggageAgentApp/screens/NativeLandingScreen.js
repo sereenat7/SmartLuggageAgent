@@ -1,4 +1,4 @@
-﻿// screens/NativeLandingScreen.js
+// screens/NativeLandingScreen.js
 // Mobile landing page matching the web design: dark hero, bold headline,
 // Register / Login / Guest CTAs.
 import React, { useEffect, useRef } from 'react';

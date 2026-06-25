@@ -36,3 +36,4 @@ const styles = StyleSheet.create({
   check: { color: '#fff', fontWeight: '700' },
   label: { color: '#fff', marginLeft: 10, flex: 1 },
 });
+

@@ -41,3 +41,4 @@ const styles = StyleSheet.create({
   fileText: { color: '#fff' },
   fileSubText: { color: '#ffdcdc', fontSize: 12 },
 });
+

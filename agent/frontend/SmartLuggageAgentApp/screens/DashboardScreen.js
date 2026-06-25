@@ -42,6 +42,7 @@ export default function DashboardScreen({ navigation, route }) {
   const [locationLabel, setLocationLabel] = useState('Location not synced');
   const [locationSyncStatus, setLocationSyncStatus] = useState('idle');
   const [agentCoords, setAgentCoords] = useState(null);
+  const [matcherAgentId, setMatcherAgentId] = useState(null);
 
   const { token, user } = route.params || {};
 
@@ -139,10 +140,10 @@ export default function DashboardScreen({ navigation, route }) {
       setInboxLoading(true);
       setInboxError('');
       const inboxUrl = new URL(`${USER_API_URL}/api/agents/inbox`);
-      const resolvedAgentId = user?.id;
+      const resolvedAgentId = matcherAgentId || user?.id;
       const resolvedPhone = displayData?.mobile || displayData?.phone || user?.mobile || user?.phone;
       if (resolvedAgentId) inboxUrl.searchParams.set('agentId', String(resolvedAgentId));
-      if (resolvedPhone) inboxUrl.searchParams.set('phone', String(resolvedPhone));
+      else if (resolvedPhone) inboxUrl.searchParams.set('phone', String(resolvedPhone));
 
       const resp = await fetchWithTimeout(inboxUrl.toString());
       const data = await parseMaybeJson(resp);
@@ -173,7 +174,7 @@ export default function DashboardScreen({ navigation, route }) {
     } finally {
       setInboxLoading(false);
     }
-  }, [displayData?.mobile, displayData?.phone, enrichWaitingWithEta, fetchWithTimeout, user?.id, user?.mobile, user?.phone]);
+  }, [displayData?.mobile, displayData?.phone, enrichWaitingWithEta, fetchWithTimeout, matcherAgentId, user?.id, user?.mobile, user?.phone]);
 
   useEffect(() => {
     fetchInbox();
@@ -203,7 +204,7 @@ export default function DashboardScreen({ navigation, route }) {
   const respondToRequest = async (request, action) => {
     try {
       setActionLoadingId(request.queueId);
-      const resolvedAgentId = request?.preferredAgentId || user?.id;
+      const resolvedAgentId = request?.preferredAgentId || matcherAgentId || user?.id;
 
       const resp = await fetchWithTimeout(`${USER_API_URL}/api/agents/respond-request`, {
         method: 'POST',
@@ -249,7 +250,7 @@ export default function DashboardScreen({ navigation, route }) {
           departureCity: request?.departureCity || null,
           arrivalCity: request?.arrivalCity || null,
           additionalInfo: request?.additionalInfo || null,
-          status: 'in-progress',
+          status: 'agent_assigned',
         };
 
         setWaitingRequests((prev) => prev.filter((item) => item.queueId !== request.queueId));
@@ -319,18 +320,53 @@ export default function DashboardScreen({ navigation, route }) {
     bookingId: session.bookingId || session.booking_id || null,
     agentName: session.userName || 'Customer',
     customerName: session.userName || 'Customer',
-    agentId: `USR${session.userId || ''}`,
+    agentId: session.agentId || session.agent_id || null,
     type: 'Pickup',
     pickupLocation: session.pickupLocation || session.pickupAddress || session.pickup_address || 'Pickup location pending',
     dropLocation: session.dropLocation || session.dropAddress || session.drop_address || 'Drop location pending',
     timeSlot: session.timeSlot || session.pickupTime || 'Time slot pending',
     luggage: Number(session.luggage || session.bagCount || session.bag_count || 1),
-    status: 'in-progress',
+    status: session.bookingStatus || session.status || 'agent_assigned',
     phoneNumber: session.userPhone || '',
     pickupLatitude: session.pickupLatitude,
     pickupLongitude: session.pickupLongitude,
     photos: session.photos || null,
   });
+
+  const openActiveSession = (session) => {
+    const bookingStatus = String(session.bookingStatus || session.status || 'agent_assigned')
+      .trim()
+      .toLowerCase()
+      .replace(/-/g, '_');
+
+    if (['agent_assigned', 'accepted', 'assigned'].includes(bookingStatus)) {
+      navigation.navigate('AgentRouteMap', {
+        bookingId: session.bookingId || session.booking_id || null,
+        request: {
+          queueId: session.queueId,
+          bookingId: session.bookingId || session.booking_id || null,
+          sessionId: session.sessionId,
+          agentId: session.agentId || session.agent_id || matcherAgentId || user?.id || null,
+          name: session.userName || 'Customer',
+          phone: session.userPhone || '',
+          pickupAddress: session.pickupLocation || session.pickupAddress || 'Pickup location',
+          pickupLatitude: session.pickupLatitude ?? null,
+          pickupLongitude: session.pickupLongitude ?? null,
+          dropAddress: session.dropLocation || session.dropAddress || '',
+          pickupTime: session.timeSlot || session.pickupTime || '',
+          bagCount: session.luggage || session.bagCount || 1,
+          bagWeight: session.bagWeight || null,
+          photos: session.photos || null,
+          status: bookingStatus,
+        },
+      });
+      return;
+    }
+
+    navigation.navigate('TaskDetails', {
+      task: buildTaskFromSession(session),
+    });
+  };
 
   const pingAgentLocation = useCallback(async () => {
     try {
@@ -371,6 +407,10 @@ export default function DashboardScreen({ navigation, route }) {
       const payload = await parseMaybeJson(resp);
       if (!resp.ok || payload.success === false) {
         throw new Error(payload.message || 'Failed to sync location');
+      }
+      const syncedAgentId = Number(payload?.agent?.agent_id);
+      if (Number.isFinite(syncedAgentId) && syncedAgentId > 0) {
+        setMatcherAgentId(syncedAgentId);
       }
       setLocationSyncStatus('ok');
     } catch (error) {
@@ -491,9 +531,7 @@ export default function DashboardScreen({ navigation, route }) {
                   <InProgressSessionCard
                     key={session.sessionId}
                     session={session}
-                    onViewTask={() => navigation.navigate('TaskDetails', {
-                      task: buildTaskFromSession(session),
-                    })}
+                    onViewTask={() => openActiveSession(session)}
                   />
                 ))
               ) : filteredTasks.length > 0 ? (

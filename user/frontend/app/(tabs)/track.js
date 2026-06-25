@@ -611,7 +611,7 @@ export default function TrackLuggage() {
       }
 
       await fetchBookingData(targetBookingId);
-    }, 10000);
+    }, 5000);
 
     setLoading(false);
   }, [fetchBookingData]);

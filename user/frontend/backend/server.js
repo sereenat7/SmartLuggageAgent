@@ -9,8 +9,17 @@ const authRoutes = require("./routes/auth");
 const bookingRoutes = require("./routes/bookings");
 const paymentRoutes = require("./routes/payment");
 const agentRoutes = require("./routes/agents");
+const reviewRoutes = require("./routes/reviews");
+const complaintRoutes = require("./routes/complaints");
+const mailboxRoutes = require("./routes/mailbox");
+const userRoutes = require("./routes/users");
+const adminBookingsRoutes = require("./routes/adminBookings");
+const adminPaymentsRoutes = require("./routes/adminPayments");
+const adminAgentsRoutes = require("./routes/adminAgents");
 const initializeDatabase = require("./initDB");
 const { startBookingAssignmentScheduler } = require("./assignmentScheduler");
+const { logEmailConfigStatus } = require("./utils/notify");
+const { startMailboxSyncScheduler } = require("./utils/mailboxSync");
 
 // Create logs directory if it doesn't exist
 const logsDir = path.join(__dirname, "logs");
@@ -183,6 +192,13 @@ app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/agents", agentRoutes);
+app.use("/api/reviews", reviewRoutes);
+app.use("/api/complaints", complaintRoutes);
+app.use("/api/mailbox", mailboxRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/admin/bookings", adminBookingsRoutes);
+app.use("/api/admin/payments", adminPaymentsRoutes);
+app.use("/api/admin/agents", adminAgentsRoutes);
 
 // Health check endpoint
 app.get("/health", (req, res) => {
@@ -267,10 +283,13 @@ app.use((err, req, res, next) => {
 initializeDatabase(() => {
   app.listen(port, host, () => {
     console.log(`Server running on http://${host}:${port}`);
+    logEmailConfigStatus();
     console.log("✅ Server ready to accept requests");
   });
   
   // Start the booking assignment scheduler
   startBookingAssignmentScheduler();
   console.log("✅ Booking assignment scheduler started (runs every 60 seconds)");
+  startMailboxSyncScheduler(60000);
+  console.log("✅ Mailbox sync scheduler started (runs every 60 seconds)");
 });

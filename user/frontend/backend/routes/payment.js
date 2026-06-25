@@ -300,14 +300,14 @@ router.post("/verify-payment", verifyToken, async (req, res) => {
         bookingData.dropLongitude,
         bookingData.photos ? JSON.stringify(bookingData.photos) : null,
         bookingData.additionalInfo,
-        'pending',
+        'confirmed',
         'completed',
         razorpayOrderId,
         razorpayPaymentId,
         paidAmount,
         paymentMethod,
         null, // assignment_due_at
-        'scheduled' // assignment_status
+        'confirmed' // assignment_status
       ];
 
       console.log('DEBUG: INSERT values array:', values);

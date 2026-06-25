@@ -321,6 +321,7 @@ export default function AgentRouteMapScreen({ navigation, route }) {
               ...customerFromServer,
               bookingId: bookingIdFromParams,
               sessionId: request?.sessionId,
+              status: 'in_progress',
             }),
           },
         }],

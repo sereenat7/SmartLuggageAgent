@@ -15,7 +15,7 @@ async function main() {
   // Verify local MySQL Workbench is reachable before running migrations
   try {
     await pool.query("SELECT 1");
-    console.log(`Connected to MySQL at ${process.env.MYSQL_HOST || "localhost"}:${process.env.MYSQL_PORT || 3307}`);
+    console.log(`Connected to MySQL at ${process.env.MYSQL_HOST || "localhost"}:${process.env.MYSQL_PORT || 3306}`);
   } catch (err) {
     console.error("Could not connect to database:", err.message);
     console.error("Make sure MySQL Workbench is running and .env credentials are correct.");
@@ -42,4 +42,5 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
 

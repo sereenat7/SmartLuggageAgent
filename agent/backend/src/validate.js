@@ -71,3 +71,4 @@ export const kycSchema = z.object({
   agreePrivacy: z.preprocess((val) => val === 'true' || val === true, z.boolean()).optional(),
   agreeCommunications: z.preprocess((val) => val === 'true' || val === true, z.boolean()).optional(),
 });
+

@@ -20,7 +20,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import Colors from '../constants/colors';
 import { USER_API_URL } from '../config';
-import { startBookingTask } from '../utils/trackingService';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PHOTO_SIZE = (SCREEN_WIDTH - 60) / 3;
@@ -94,32 +93,13 @@ export default function TaskDetailsScreen({ navigation, route }) {
   const isOnTheWay = normalizeStatus(currentStatus) === 'on_the_way' || normalizeStatus(currentStatus) === 'picked_up';
 
   useEffect(() => {
-    const maybeStartTask = async () => {
-      if (!bookingId) return;
-      const status = normalizeStatus(booking?.status || booking?.assignment_status || currentStatus);
-      if (status !== 'agent_assigned' && status !== 'accepted' && status !== 'assigned') return;
-      try {
-        const updated = await startBookingTask(
-          bookingId,
-          booking?.agentId || booking?.agent_id || booking?.preferredAgentId || null,
-        );
-        if (updated?.status) {
-          setCurrentStatus(String(updated.status).toLowerCase());
-        } else {
-          setCurrentStatus('in_progress');
-        }
-      } catch (error) {
-        console.warn('[TaskDetails] Auto-start skipped:', error?.message);
-      }
-    };
-    maybeStartTask();
-  }, [bookingId]);
-
-  useEffect(() => {
     if (normalizeStatus(booking?.status) === 'on_the_way' || normalizeStatus(booking?.status) === 'picked_up') {
       setPickupConfirmed(true);
     }
-  }, [booking?.status]);
+    if (booking?.status || booking?.assignment_status) {
+      setCurrentStatus(String(booking?.status || booking?.assignment_status).toLowerCase());
+    }
+  }, [booking?.status, booking?.assignment_status]);
 
   // Resend OTP timer
   useEffect(() => {
@@ -202,6 +182,18 @@ export default function TaskDetailsScreen({ navigation, route }) {
   };
 
   const handleConfirmPickup = () => {
+    const status = normalizeStatus(currentStatus);
+    if (status === 'agent_assigned' || status === 'accepted' || status === 'assigned') {
+      Alert.alert(
+        'Complete arrival first',
+        'Open the map and tap Arrived / Start Task before confirming pickup.',
+      );
+      return;
+    }
+    if (status !== 'in_progress') {
+      Alert.alert('Not ready', 'Pickup can only be confirmed while the task is in progress.');
+      return;
+    }
     handleStatusUpdate('on-the-way');
   };
 
@@ -357,13 +349,24 @@ export default function TaskDetailsScreen({ navigation, route }) {
 
   const getStatusLabel = (status) => {
     switch (normalizeStatus(status)) {
-      case 'pending': return 'Pending Acceptance';
-      case 'accepted': return 'Accepted';
+      case 'pending':
+      case 'confirmed':
+        return 'Pending Acceptance';
+      case 'agent_assigned':
+      case 'accepted':
+      case 'assigned':
+        return 'Agent Assigned';
+      case 'in_progress':
+        return 'In Progress';
       case 'picked_up':
       case 'on-the-way':
-      case 'on_the_way': return 'On The Way';
-      case 'delivered': return 'Delivered';
-      default: return status;
+      case 'on_the_way':
+        return 'On The Way';
+      case 'delivered':
+      case 'completed':
+        return 'Delivered';
+      default:
+        return status;
     }
   };
 

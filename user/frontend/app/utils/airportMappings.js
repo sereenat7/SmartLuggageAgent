@@ -1,3 +1,5 @@
+import { API_BASE_URL } from '../../utils/api';
+
 /**
  * Simple airport name normalization - expands common abbreviations
  * @param {string} airportName - Airport name potentially with abbreviations
@@ -26,28 +28,28 @@ export const normalizeAirportName = (airportName) => {
  */
 const fetchCoordinatesFromGeoapify = async (address) => {
   try {
-    const response = await fetch(
-      `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/geocode`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ address })
-      }
-    );
+    const apiUrl = `${API_BASE_URL}/api/geocode`;
+    console.log('Geocode backend URL:', apiUrl);
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ address })
+    });
     
     const data = await response.json();
     console.log('Geocode response:', { address, data });
     
-    if (data.latitude && data.longitude) {
+    if (data.success && data.latitude && data.longitude) {
       return { lat: data.latitude, lon: data.longitude };
     }
     
     console.warn(`No coordinates found for: ${address}`);
     return { lat: 0, lon: 0 };
   } catch (error) {
-    console.error('Geocode fetch error:', error);
+    console.warn('Geocode fetch warning:', error?.message || error);
     return { lat: 0, lon: 0 };
   }
 };
@@ -85,3 +87,4 @@ export const createDropLocation = async (depAirport, terminal) => {
     terminal: terminal || 'N/A'
   };
 };
+

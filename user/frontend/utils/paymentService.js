@@ -2,7 +2,7 @@ import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Backend API URL from .env file - change EXPO_PUBLIC_API_URL in .env to update
-const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000'}/api/payment`;
+const API_URL = `${process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.127:5000'}/api/payment`;
 
 /**
  * Create a Razorpay order

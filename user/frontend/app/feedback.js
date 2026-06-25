@@ -10,21 +10,23 @@ import {
   Platform,
   StatusBar,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { submitFeedback } from '../utils/feedbackService';
 
 export default function SmartLuggageFeedbackScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  // State Hooks
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [rating, setRating] = useState(0);
   const [message, setMessage] = useState('');
-
+  const [submitting, setSubmitting] = useState(false);
   const categories = [
     'App Experience',
     'Booking Experience',
@@ -34,11 +36,7 @@ export default function SmartLuggageFeedbackScreen() {
     'Report Bug',
   ];
 
-  const handleSubmit = () => {
-    if (!selectedCategory) {
-      Alert.alert('Selection Required', 'Please select a feedback topic.');
-      return;
-    }
+  const handleSubmit = async () => {
     if (rating === 0) {
       Alert.alert('Rating Required', 'Please pick a star rating.');
       return;
@@ -48,13 +46,30 @@ export default function SmartLuggageFeedbackScreen() {
       return;
     }
 
-    Alert.alert(
-      'Thank you!',
-      'Your feedback helps us perfect our logistics experience.',
-      [{ text: 'OK', onPress: () => router.back() }]
-    );
-  };
+    try {
+      setSubmitting(true);
 
+      const userName = await AsyncStorage.getItem('userName');
+      const userPhone = global.userPhone || (await AsyncStorage.getItem('userPhone'));
+
+      await submitFeedback({
+        name: userName || 'User',
+        phone: userPhone,
+        category: selectedCategory,
+        rating,
+        message: message.trim(),
+      });
+
+      Alert.alert('Thank you for your valuable feedback', '', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
+    } catch (error) {
+      console.error('Feedback submit error:', error);
+      Alert.alert('Submission Failed', error.message || 'Please check your connection and try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -109,7 +124,7 @@ export default function SmartLuggageFeedbackScreen() {
               return (
                 <View key={item} style={styles.gridItemColumn}>
                   {isSelected ? (
-                    <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedCategory(item)}>
+                    <TouchableOpacity activeOpacity={0.9} onPress={() => setSelectedCategory(isSelected ? null : item)}>
                       <LinearGradient
                         colors={['#ff0033', '#ff6600']}
                         start={{ x: 0, y: 0 }}
@@ -122,7 +137,7 @@ export default function SmartLuggageFeedbackScreen() {
                   ) : (
                     <TouchableOpacity
                       activeOpacity={0.7}
-                      onPress={() => setSelectedCategory(item)}
+                      onPress={() => setSelectedCategory(isSelected ? null : item)}
                       style={styles.chipDefaultBorder}
                     >
                       <Text style={styles.chipTextDefault}>{item}</Text>
@@ -177,17 +192,25 @@ export default function SmartLuggageFeedbackScreen() {
           {/* ==================================================== */}
           {/* SECTION 4 — SUBMIT ACTION TRIGGER                     */}
           {/* ==================================================== */}
-          <TouchableOpacity activeOpacity={0.8} onPress={handleSubmit} style={styles.submitContainer}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleSubmit}
+            disabled={submitting}
+            style={[styles.submitContainer, submitting && styles.submitContainerDisabled]}
+          >
             <LinearGradient
               colors={['#ff0033', '#ff6600']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.submitGradientFill}
             >
-              <Text style={styles.submitText}>Submit Feedback</Text>
+              {submitting ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.submitText}>Submit Feedback</Text>
+              )}
             </LinearGradient>
           </TouchableOpacity>
-
           {/* Footer Branding text */}
           <Text style={styles.footerMicroText}>
             Your insights directly support our terminal engineering and local delivery lines.
@@ -381,7 +404,9 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  submitGradientFill: {
+  submitContainerDisabled: {
+    opacity: 0.75,
+  },  submitGradientFill: {
     height: 52,
     alignItems: 'center',
     justifyContent: 'center',

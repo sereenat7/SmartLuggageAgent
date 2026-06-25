@@ -377,7 +377,8 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, '0.0.0.0', async () => {
   // eslint-disable-next-line no-console
-  console.log(`API running on http://localhost:${PORT}`);
+  console.log(`API running on http://0.0.0.0:${PORT} (LAN: use your PC IP, e.g. http://192.168.0.127:${PORT})`);
   await ensureKycComponentsTable();
   await testConnection();
 });
+

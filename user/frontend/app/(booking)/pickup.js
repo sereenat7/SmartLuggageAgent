@@ -9,6 +9,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../../utils/api';
 
 export default function PickupDetails() {
   const router = useRouter();
@@ -32,6 +33,13 @@ export default function PickupDetails() {
     return `${hours}:${minutes} ${ampm}`;
   };
 
+  // Format time in 24-hour format HH:MM
+  const formatTime24Hour = (date) => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
   const getTravelTimeMinutes = (address) => {
     if (!address) return 60;
     const addr = address.toLowerCase();
@@ -42,46 +50,44 @@ export default function PickupDetails() {
   };
 
   // ✅ FETCH AND SAVE COORDINATES WHEN PICKUP ADDRESS CHANGES
-  const fetchAndSavePickupCoordinates = useCallback(async (address) => {
-    if (!address) return;
+const fetchAndSavePickupCoordinates = useCallback(async (address) => {
+  if (!address || address.trim().length < 5) return;
 
-    try {
-      const GEO_API_KEY = "6a6f5450f3164727b88686b4a5a0fffd";
-      const response = await fetch(
-        `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(address)}&apiKey=${GEO_API_KEY}`
-      );
-      const data = await response.json();
+  try {
+    const apiUrl = `${API_BASE_URL}/api/geocode`;
+    console.log('Calling geocode backend:', apiUrl, 'address:', address);
 
-      if (data.features && data.features.length > 0) {
-        const feature = data.features[0];
-        let latitude = null;
-        let longitude = null;
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address })
+    });
 
-        if (feature.geometry && feature.geometry.coordinates) {
-          // Geoapify returns [lon, lat]
-          [longitude, latitude] = feature.geometry.coordinates;
-        } else if (feature.properties) {
-          latitude = feature.properties.lat;
-          longitude = feature.properties.lon;
-        }
-
-        if (latitude && longitude) {
-          // Save to AsyncStorage
-          await AsyncStorage.setItem(
-            "pickupLocationDetails",
-            JSON.stringify({
-              address: address,
-              latitude: latitude,
-              longitude: longitude,
-              userSelected: true
-            })
-          );
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching pickup coordinates:", error);
+    if (!response.ok) {
+      throw new Error(`HTTP Error: ${response.status}`);
     }
-  }, []);
+
+    const data = await response.json();
+
+    // Backend returns { success: true, latitude, longitude }
+    if (data && data.success && data.latitude && data.longitude) {
+      await AsyncStorage.setItem(
+        'pickupLocationDetails',
+        JSON.stringify({
+          address,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          userSelected: true,
+        })
+      );
+      console.log('✅ Pickup coordinates saved via backend');
+    } else {
+      console.warn('⚠ Geocode backend returned no coordinates', data);
+    }
+  } catch (error) {
+    console.warn('Geocode fetch warning:', error?.message || error);
+  }
+}, []);
 
   // ✅ FORCED 24H CALCULATION LOGIC
   const updateDynamicPickupTime = useCallback(() => {
@@ -89,17 +95,26 @@ export default function PickupDetails() {
 
     setIsCalculating(true);
     try {
-      // 1. Parse "6:05 PM" manually
-      const timeMatch = params.depTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
-      if (!timeMatch) return;
+      let hours, minutes;
+      
+      // Try 24-hour format first (HH:MM)
+      let timeMatch = params.depTime.match(/^(\d{1,2}):(\d{2})$/);
+      if (timeMatch) {
+        hours = parseInt(timeMatch[1], 10);
+        minutes = parseInt(timeMatch[2], 10);
+      } else {
+        // Try 12-hour format (H:MM AM/PM)
+        timeMatch = params.depTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+        if (!timeMatch) return;
 
-      let hours = parseInt(timeMatch[1], 10);
-      const minutes = parseInt(timeMatch[2], 10);
-      const ampm = timeMatch[3].toUpperCase();
+        hours = parseInt(timeMatch[1], 10);
+        minutes = parseInt(timeMatch[2], 10);
+        const ampm = timeMatch[3].toUpperCase();
 
-      // Convert to 24-hour clock for math
-      if (ampm === 'PM' && hours < 12) hours += 12;
-      if (ampm === 'AM' && hours === 12) hours = 0;
+        // Convert to 24-hour clock for math
+        if (ampm === 'PM' && hours < 12) hours += 12;
+        if (ampm === 'AM' && hours === 12) hours = 0;
+      }
 
       // 2. Create Date Object (Anchor to today)
       const calculationDate = new Date();
@@ -150,6 +165,7 @@ export default function PickupDetails() {
   );
 
   const handleConfirm = async () => {
+    let formattedTime = formatTime24Hour(pickupTime);
     try {
       // Get pickup location coordinates from AsyncStorage
       const pickupDetails = await AsyncStorage.getItem('pickupLocationDetails');
@@ -161,7 +177,7 @@ export default function PickupDetails() {
           ...params,
           pincode,
           pickupAddress,
-          pickupTime: formatTimeToAMPM(pickupTime), 
+          pickupTime: formattedTime,
           additionalInfo,
           // Pass coordinates through params
           pickupLatitude: pickupData.latitude ? String(pickupData.latitude) : "",
@@ -176,7 +192,7 @@ export default function PickupDetails() {
           ...params,
           pincode,
           pickupAddress,
-          pickupTime: formatTimeToAMPM(pickupTime), 
+          pickupTime: formattedTime,
           additionalInfo,
         }
       });

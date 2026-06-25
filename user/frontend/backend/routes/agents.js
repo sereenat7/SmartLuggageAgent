@@ -3,6 +3,10 @@ const { Buffer } = require("buffer");
 const { latLngToCell, gridDistance } = require("h3-js");
 const router = express.Router();
 const db = require("../db");
+const {
+  repairOrphanQueuedBookings,
+  repairMissingAgentQueueEntries,
+} = require("./bookings");
 const { computeAgentSchedule, PICKUP_PREP_BUFFER_MIN } = require("../utils/agentSchedule");
 const { BOOKING_STATUS, advanceBookingStatus } = require("../utils/bookingStatus");
 
@@ -393,9 +397,10 @@ router.post("/agent-location", async (req, res) => {
         `UPDATE support_agents
          SET latitude = ?, longitude = ?, h3_index = ?, location_updated_at = CURRENT_TIMESTAMP,
              name = COALESCE(?, name), status = 'available',
+             phone = COALESCE(?, phone),
              vehicle_type = COALESCE(?, vehicle_type), max_weight_kg = COALESCE(?, max_weight_kg)
          WHERE agent_id = ?`,
-        [lat, lng, h3Index, name || null, vType, derivedWeight, agentId]
+        [lat, lng, h3Index, name || null, lookupPhone, vType, derivedWeight, agentId]
       );
       if (updateResult?.affectedRows) {
         const rows = await runQuery(
@@ -403,6 +408,24 @@ router.post("/agent-location", async (req, res) => {
           [agentId]
         );
         return res.json({ success: true, agent: rows[0] });
+      }
+      try {
+        await runQuery(
+          `INSERT INTO support_agents (agent_id, name, phone, status, current_user_id, latitude, longitude, h3_index, vehicle_type, max_weight_kg, location_updated_at)
+           VALUES (?, ?, ?, 'available', NULL, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          [agentId, lookupName, lookupPhone, lat, lng, h3Index, vType, derivedWeight]
+        );
+        const rows = await runQuery(
+          "SELECT agent_id, name, phone, status, latitude, longitude, h3_index, location_updated_at FROM support_agents WHERE agent_id = ? LIMIT 1",
+          [agentId]
+        );
+        if (rows.length) {
+          return res.json({ success: true, agent: rows[0] });
+        }
+      } catch (insertErr) {
+        if (insertErr?.code !== "ER_DUP_ENTRY") {
+          throw insertErr;
+        }
       }
       if (!lookupPhone && lookupName) {
         const phoneByName = await runQuery(
@@ -634,9 +657,18 @@ router.post("/request-agent", verifyToken, async (req, res) => {
 
 router.get("/inbox", async (req, res) => {
   try {
+    try {
+      await repairOrphanQueuedBookings();
+      await repairMissingAgentQueueEntries();
+    } catch (repairErr) {
+      console.warn("[Inbox] Queue repair failed:", repairErr?.message);
+    }
+
     let currentAgentId = Number(req.query?.agentId) || Number(req.query?.agent_id) || null;
     const currentAgentPhoneRaw = req.query?.phone || req.query?.mobile || req.query?.agentPhone || null;
-    if (currentAgentPhoneRaw) {
+    // Only resolve by phone when agentId was not supplied — phone must not override an explicit agentId
+    // (e.g. customer and agent sharing a test number, or multiple support_agents rows).
+    if (!currentAgentId && currentAgentPhoneRaw) {
       const digits = String(currentAgentPhoneRaw).replace(/\D+/g, "");
       const lastTen = digits.slice(-10);
       if (lastTen) {
@@ -756,7 +788,7 @@ router.get("/inbox", async (req, res) => {
               b.pickup_address, b.pickup_latitude, b.pickup_longitude,
               b.drop_address, b.drop_latitude, b.drop_longitude,
               b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
-              b.airline_name, b.flight_number, b.assignment_due_at, b.photos
+              b.airline_name, b.flight_number, b.assignment_due_at, b.photos, b.status AS booking_status
           FROM agent_sessions s
           JOIN support_agents a ON a.agent_id = s.agent_id
           JOIN users u ON u.id = s.user_id
@@ -767,7 +799,7 @@ router.get("/inbox", async (req, res) => {
               b.pickup_address, b.pickup_latitude, b.pickup_longitude,
               b.drop_address, b.drop_latitude, b.drop_longitude,
               b.pickup_time, b.departure_date, b.bag_count, b.bag_weight,
-              b.airline_name, b.flight_number, b.assignment_due_at, b.photos
+              b.airline_name, b.flight_number, b.assignment_due_at, b.photos, b.status AS booking_status
           FROM agent_sessions s
           JOIN support_agents a ON a.agent_id = s.agent_id
           JOIN users u ON u.id = s.user_id
@@ -829,6 +861,7 @@ router.get("/inbox", async (req, res) => {
           bagCount: row.bag_count, bagWeight: row.bag_weight,
           airlineName: row.airline_name, flightNumber: row.flight_number,
           assignmentDueAt: row.assignment_due_at,
+          bookingStatus: row.booking_status,
           photos: photosArray,
         };
       }),

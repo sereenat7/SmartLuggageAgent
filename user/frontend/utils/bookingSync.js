@@ -144,11 +144,11 @@ export const getBookingStage = (booking) => {
     return 0;
   }
 
-  const stage = getBookingStageFromStatusValue(booking?.status);
-  if (stage > 0) return stage;
-
+  const statusStage = getBookingStageFromStatusValue(booking?.status);
   const assignmentStage = getBookingStageFromStatusValue(booking?.assignment_status);
-  if (assignmentStage > 0) return assignmentStage;
+  const resolvedStage = Math.max(statusStage, assignmentStage);
+
+  if (resolvedStage > 0) return resolvedStage;
 
   return booking?.created_at ? 1 : 0;
 };

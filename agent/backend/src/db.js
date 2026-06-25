@@ -12,7 +12,7 @@ export function getPool() {
     port: Number(process.env.MYSQL_PORT || 3306), // 3307 matches local MySQL Workbench default in .env
     user: process.env.MYSQL_USER || "root",
     password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE || "smartluggage",
+    database: process.env.MYSQL_DATABASE || "smart_luggage",
     waitForConnections: true,
     connectionLimit: 10,
     maxIdle: 10,
@@ -31,7 +31,7 @@ export async function testConnection() {
     const conn = await pool.getConnection();
     conn.release();
     console.log(
-      `✅ MySQL connected — host=${process.env.MYSQL_HOST || "localhost"} port=${process.env.MYSQL_PORT || 3307} db=${process.env.MYSQL_DATABASE || "smartluggage"}`
+      `✅ MySQL connected — host=${process.env.MYSQL_HOST || "localhost"} port=${process.env.MYSQL_PORT || 3306} db=${process.env.MYSQL_DATABASE || "smartluggage"}`
     );
   } catch (err) {
     console.error("❌ MySQL connection failed:", err.message);
@@ -43,4 +43,5 @@ export async function testConnection() {
     process.exit(1);
   }
 }
+
 

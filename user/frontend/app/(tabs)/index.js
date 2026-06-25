@@ -11,6 +11,9 @@ import * as Location from 'expo-location';
 import * as bookingSync from '../../utils/bookingSync';
 import { API_BASE_URL } from '../../utils/api';
 
+//Line number 294, Change this to the actual support phone number!!!
+
+
 export default function Home() {
   const router = useRouter();
   const params = useLocalSearchParams(); 
@@ -291,6 +294,7 @@ export default function Home() {
   };
 
   const SUPPORT_EMAIL = 'smartluggage.support@gmail.com';
+  //TODO: Change this to the actual support phone number!!!
   const SUPPORT_PHONE = '1800 123 456';
   const SUPPORT_PHONE_DIAL = '1800123456';
 
@@ -524,7 +528,7 @@ export default function Home() {
               </View>
               <View style={styles.supportHeaderText}>
                 <Text style={styles.supportTitle}>Need help?</Text>
-                <Text style={styles.supportSubtitle}>We usually reply within a few minutes.</Text>
+                <Text style={styles.supportSubtitle}>We usually reply within 24 hours.</Text>
               </View>
             </View>
 

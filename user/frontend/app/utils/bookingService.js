@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.236.235.44:5000';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.0.127:5000';
 
 // Convert DD/MM/YYYY to YYYY-MM-DD format for MySQL
 const convertDateToMySQLFormat = (dateStr) => {
@@ -18,14 +18,23 @@ const convertDateToMySQLFormat = (dateStr) => {
   }
 };
 
-// Convert 12-hour time (1:23 AM) to 24-hour format (01:23:00)
+// Convert 12-hour time (1:23 AM) or 24-hour time (13:23) to 24-hour format (01:23:00)
 const convertTimeToMySQLFormat = (timeStr) => {
   if (!timeStr) return null;
   try {
     // Remove extra spaces and parse
     const time = timeStr.trim();
+    
+    // Try 24-hour format first (HH:MM)
+    let match = time.match(/^(\d{1,2}):(\d{2})$/);
+    if (match) {
+      const [, hours, minutes] = match;
+      return `${String(hours).padStart(2, '0')}:${minutes}:00`;
+    }
+    
+    // Try 12-hour format (H:MM AM/PM)
     const regex = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i;
-    const match = time.match(regex);
+    match = time.match(regex);
     
     if (!match) return timeStr; // Return as-is if not matching pattern
     
@@ -181,3 +190,4 @@ export const getUserBookings = async () => {
     throw error;
   }
 };
+

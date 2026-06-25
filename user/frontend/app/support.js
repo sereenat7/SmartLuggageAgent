@@ -95,9 +95,6 @@ export default function SmartLuggageSupport() {
                 <Ionicons name="headset" size={28} color="#ffffff" />
               </View>
               <Text style={styles.heroHeading}>Need help with your luggage booking or delivery?</Text>
-              <TouchableOpacity style={styles.heroBannerButton} activeOpacity={0.9} onPress={() => Alert.alert("Live Chat Support", "Connecting to a logistics agent...")}>
-                <Text style={styles.heroBannerButtonText}>Contact Support</Text>
-              </TouchableOpacity>
             </LinearGradient>
 
             <Text style={styles.sectionLabelTitle}>Support Categories</Text>
@@ -151,7 +148,7 @@ export default function SmartLuggageSupport() {
             <View style={styles.appSupportContactFooter}>
               <View style={styles.footerContactEmailLine}>
                 <Ionicons name="mail" size={16} color="#ff0033" style={{ marginRight: 6 }} />
-                <Text style={styles.supportEmailText}>support@smartluggage.com</Text>
+                <Text style={styles.supportEmailText}>smartluggage.support@gmail.com</Text>
               </View>
               <Text style={styles.supportTimeframeText}>Our support team usually responds within 24 hours.</Text>
             </View>

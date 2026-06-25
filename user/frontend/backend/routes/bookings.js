@@ -301,6 +301,67 @@ const repairOrphanQueuedBookings = () =>
     );
   });
 
+const repairMissingAgentQueueEntries = () =>
+  new Promise((resolve, reject) => {
+    db.query(
+      `SELECT b.id,
+              COALESCE(b.user_id, u.id) AS user_id,
+              b.assigned_agent_id,
+              b.phone
+       FROM bookings b
+       LEFT JOIN users u ON u.phone = b.phone
+         OR u.phone = CONCAT('+91', REPLACE(REPLACE(b.phone, '+91', ''), ' ', ''))
+         OR REPLACE(REPLACE(u.phone, '+', ''), ' ', '') = REPLACE(REPLACE(b.phone, '+', ''), ' ', '')
+       LEFT JOIN agent_queue aq ON aq.booking_id = b.id AND aq.status = 'waiting'
+       LEFT JOIN agent_sessions s ON s.booking_id = b.id AND s.status = 'active'
+       WHERE b.assigned_agent_id IS NOT NULL
+         AND aq.id IS NULL
+         AND s.session_id IS NULL
+         AND LOWER(COALESCE(b.status, '')) NOT IN ('cancelled', 'completed', 'delivered')
+         AND (
+           LOWER(COALESCE(b.payment_status, '')) IN ('completed', 'paid', 'success', 'captured')
+           OR b.razorpay_payment_id IS NOT NULL
+         )
+       ORDER BY b.created_at DESC
+       LIMIT 25`,
+      async (err, rows) => {
+        if (err) return reject(err);
+        for (const row of rows || []) {
+          if (!row.user_id) {
+            console.warn("[InboxRepair] Skipping booking", row.id, "- no user_id");
+            continue;
+          }
+          try {
+            await new Promise((res, rej) => {
+              db.query(
+                "UPDATE bookings SET user_id = ? WHERE id = ? AND user_id IS NULL",
+                [row.user_id, row.id],
+                () => {
+                  db.query(
+                    `INSERT INTO agent_queue (user_id, booking_id, preferred_agent_id, status)
+                     VALUES (?, ?, ?, 'waiting')
+                     ON DUPLICATE KEY UPDATE
+                       user_id = VALUES(user_id),
+                       preferred_agent_id = VALUES(preferred_agent_id),
+                       status = 'waiting',
+                       declined_agent_ids = NULL,
+                       updated_at = CURRENT_TIMESTAMP`,
+                    [row.user_id, row.id, row.assigned_agent_id],
+                    (queueErr) => (queueErr ? rej(queueErr) : res())
+                  );
+                }
+              );
+            });
+            console.log("[InboxRepair] Restored queue for assigned booking", row.id);
+          } catch (repairErr) {
+            console.warn("[InboxRepair] Queue restore failed for", row.id, repairErr?.message);
+          }
+        }
+        resolve();
+      }
+    );
+  });
+
 const isTrackingQrMatch = (booking, qrType, qrValue) => {
   const expected = buildTrackingQrPayload(booking, qrType);
   const received = String(qrValue || '').trim();
@@ -604,10 +665,6 @@ const queueBookingForAgentDashboard = (bookingId, phone) =>
         db.query(
           `UPDATE bookings
            SET assigned_at = COALESCE(assigned_at, CURRENT_TIMESTAMP),
-               status = CASE
-                 WHEN status IN ('pending', 'scheduled', 'queued') THEN 'confirmed'
-                 ELSE status
-               END,
                assignment_status = CASE
                  WHEN assignment_status IN ('pending', 'scheduled', 'queued') THEN 'confirmed'
                  ELSE assignment_status
@@ -1615,3 +1672,5 @@ router.post('/cancel/:bookingId', verifyToken, (req, res) => {
 
 module.exports = router;
 module.exports.queueBookingForAgentDashboard = queueBookingForAgentDashboard;
+module.exports.repairOrphanQueuedBookings = repairOrphanQueuedBookings;
+module.exports.repairMissingAgentQueueEntries = repairMissingAgentQueueEntries;
